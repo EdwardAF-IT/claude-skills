@@ -55,7 +55,12 @@ def main() -> int:
     want = args[0].strip().lower() if args else None
     start = Path(root_arg or ".").resolve()
     top = git(start, "rev-parse", "--show-toplevel")
+    # The cwd, its git root, and any ancestor that keeps notes of its own: a session opened in
+    # C:\Code\maestro must still find the note a sibling session left at C:\Code.
     roots = [start] + ([Path(top)] if top and Path(top) != start else [])
+    for parent in start.parents:
+        if any((parent / d).is_dir() for d in NOTE_DIRS) and parent not in roots:
+            roots.append(parent)
     notes: list[tuple[datetime, str, str, Path]] = []
     seen: set[Path] = set()
     for root in roots:
