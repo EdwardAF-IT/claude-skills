@@ -37,13 +37,31 @@ $ErrorActionPreference = 'Stop'
 function Say([string] $text) { Write-Host ('  ' + $text) }
 function Have([string] $name) { return $null -ne (Get-Command $name -ErrorAction SilentlyContinue) }
 
-function Ensure-Winget([string] $command, [string] $id, [string] $label)
+function Add-UserPath([string] $dir)
+{
+    $user = [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if (($user -split ';') -notcontains $dir)
+    {
+        [Environment]::SetEnvironmentVariable('PATH', ($user.TrimEnd(';') + ';' + $dir).TrimStart(';'), 'User')
+    }
+    $env:PATH = $env:PATH + ';' + $dir
+}
+
+function Ensure-Winget([string] $command, [string] $id, [string] $label, [string] $bin = '')
 {
     if (Have $command) { Say ($label + ' present'); return }
+    # Installed earlier but never put on PATH (Graphviz does this): add its folder, skip winget.
+    if ($bin -and (Test-Path (Join-Path $bin ($command + '.exe'))))
+    {
+        Add-UserPath $bin
+        Say ($label + ' present; added ' + $bin + ' to PATH')
+        return
+    }
     Say ('installing ' + $label + ' ...')
     winget install --id $id --exact --silent --accept-package-agreements --accept-source-agreements | Out-Null
     # A fresh install is not on this shell's PATH yet; pick it up from the machine and user PATH.
     $env:PATH = [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if (-not (Have $command) -and $bin -and (Test-Path $bin)) { Add-UserPath $bin }
     if (-not (Have $command)) { throw ($label + ' installed but ' + $command + ' is not on PATH; open a new window and run this again') }
 }
 
@@ -64,7 +82,7 @@ if (-not $SkipTools)
     Ensure-Winget 'git'    'Git.Git'             'git'
     Ensure-Winget 'node'   'OpenJS.NodeJS.LTS'   'Node.js'
     Ensure-Winget 'python' 'Python.Python.3.12'  'Python'
-    Ensure-Winget 'dot'    'Graphviz.Graphviz'   'Graphviz'
+    Ensure-Winget 'dot'    'Graphviz.Graphviz'   'Graphviz' (Join-Path $env:ProgramFiles 'Graphviz\bin')
     Ensure-Npm    'claude' '@anthropic-ai/claude-code'  'Claude Code'
     Ensure-Npm    'mmdc'   '@mermaid-js/mermaid-cli'    'mermaid-cli'
     # highlight.js is a library, not a command; check the global tree for it.
