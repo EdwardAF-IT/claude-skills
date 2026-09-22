@@ -16,11 +16,20 @@
 
 .PARAMETER SkipTools
   Copy the skills only; do not install or check tools.
+
+.PARAMETER ClaudeHome
+  Where Claude Code keeps its home folder. Defaults to ~/.claude. PowerShell's $HOME is
+  read-only, so a test run must pass this rather than setting an environment variable.
+
+.PARAMETER Stage
+  Where to keep the skills checkout. Defaults to %LOCALAPPDATA%\claude-skills.
 #>
 [CmdletBinding()]
 param(
     [string] $Repo = 'EdwardAF-IT/claude-skills',
-    [switch] $SkipTools
+    [switch] $SkipTools,
+    [string] $ClaudeHome = (Join-Path $HOME '.claude'),
+    [string] $Stage = (Join-Path $env:LOCALAPPDATA 'claude-skills')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -66,7 +75,7 @@ if (-not $SkipTools)
 
 # The skills repository lives in a staging folder; the skills are copied from there so
 # ~/.claude never becomes a checkout on a family machine.
-$stage = Join-Path $env:LOCALAPPDATA 'claude-skills'
+$stage = $Stage
 $url   = 'https://github.com/' + $Repo + '.git'
 if (Test-Path (Join-Path $stage '.git'))
 {
@@ -79,7 +88,7 @@ else
     git clone --quiet --depth 1 $url $stage
 }
 
-$dest = Join-Path $HOME '.claude\skills'
+$dest = Join-Path $ClaudeHome 'skills'
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 $count = 0
 foreach ($dir in Get-ChildItem -Directory (Join-Path $stage 'skills'))
@@ -93,7 +102,7 @@ foreach ($dir in Get-ChildItem -Directory (Join-Path $stage 'skills'))
 
 Write-Host ''
 Say ($count.ToString() + ' skills in ' + $dest)
-if (-not (Test-Path (Join-Path $HOME '.claude\.credentials.json')))
+if (-not (Test-Path (Join-Path $ClaudeHome '.credentials.json')))
 {
     Say 'next: open a new window, run "claude", and sign in when it asks'
 }
