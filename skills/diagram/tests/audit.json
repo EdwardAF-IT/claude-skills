@@ -1,0 +1,752 @@
+[
+ {
+  "path": "gate-tests\\edges-arrow-deleted.mmd",
+  "index": 0,
+  "kind": "flowchart",
+  "direction": "LR",
+  "parsed": true,
+  "nodes": 20,
+  "edges": 14,
+  "node_labels": [
+   "Alpha",
+   "B",
+   "Classifier",
+   "Delta",
+   "Endpoint",
+   "Eps",
+   "Fan in",
+   "G",
+   "Gamma",
+   "H",
+   "I",
+   "J",
+   "K",
+   "L",
+   "M",
+   "N",
+   "O",
+   "P",
+   "Q",
+   "S"
+  ],
+  "max_label_words": 2,
+  "median_label_words": 1,
+  "long_labels": [],
+  "max_edge_words": 1,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 1,
+  "rendered": true,
+  "native_w": 668.8125,
+  "native_h": 747.0078125,
+  "height_at_target_px": 696.9559854219232,
+  "measure_error": "",
+  "structural_pt": 0.0,
+  "structural_reason": "",
+  "layout_defects": [],
+  "label_pt_at_target": 11.1959629941127,
+  "smallest_text_pt": 11.1959629941127,
+  "width_driver": {
+   "role": "node",
+   "text": "Classifier",
+   "words": 1,
+   "width_px": 65.640625,
+   "measured": true
+  },
+  "text_runs": 22,
+  "findings": [
+   {
+    "severity": "warning",
+    "code": "oversized",
+    "detail": "20 nodes; past ~12 an overview should split into <thing>-overview plus one file per subprocess"
+   },
+   {
+    "severity": "nit",
+    "code": "direction",
+    "detail": "20 nodes left-to-right will be wide and shrink; top-down is usually taller and more legible \u2014 unless the nodes come in pairs"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\edges-same.mmd",
+  "index": 0,
+  "kind": "flowchart",
+  "direction": "LR",
+  "parsed": true,
+  "nodes": 20,
+  "edges": 15,
+  "node_labels": [
+   "Alpha",
+   "Beta",
+   "Classifier",
+   "Delta",
+   "Endpoint",
+   "Eps",
+   "Fan in",
+   "G",
+   "Gamma",
+   "H",
+   "I",
+   "J",
+   "K",
+   "L",
+   "M",
+   "N",
+   "O",
+   "P",
+   "Q",
+   "S"
+  ],
+  "max_label_words": 2,
+  "median_label_words": 1,
+  "long_labels": [],
+  "max_edge_words": 1,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 1,
+  "rendered": true,
+  "native_w": 810.35498046875,
+  "native_h": 695.0078125,
+  "height_at_target_px": 535.1788851215981,
+  "measure_error": "",
+  "structural_pt": 0.0,
+  "structural_reason": "",
+  "layout_defects": [],
+  "label_pt_at_target": 9.240394864567335,
+  "smallest_text_pt": 9.240394864567335,
+  "width_driver": {
+   "role": "node",
+   "text": "Classifier",
+   "words": 1,
+   "width_px": 65.640625,
+   "measured": true
+  },
+  "text_runs": 22,
+  "findings": [
+   {
+    "severity": "warning",
+    "code": "oversized",
+    "detail": "20 nodes; past ~12 an overview should split into <thing>-overview plus one file per subprocess"
+   },
+   {
+    "severity": "nit",
+    "code": "direction",
+    "detail": "20 nodes left-to-right will be wide and shrink; top-down is usually taller and more legible \u2014 unless the nodes come in pairs"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\edges.mmd",
+  "index": 0,
+  "kind": "flowchart",
+  "direction": "LR",
+  "parsed": true,
+  "nodes": 20,
+  "edges": 15,
+  "node_labels": [
+   "Alpha",
+   "Beta",
+   "Classifier",
+   "Delta",
+   "Endpoint",
+   "Eps",
+   "Fan in",
+   "G",
+   "Gamma",
+   "H",
+   "I",
+   "J",
+   "K",
+   "L",
+   "M",
+   "N",
+   "O",
+   "P",
+   "Q",
+   "S"
+  ],
+  "max_label_words": 2,
+  "median_label_words": 1,
+  "long_labels": [],
+  "max_edge_words": 1,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 1,
+  "rendered": true,
+  "native_w": 810.35498046875,
+  "native_h": 695.0078125,
+  "height_at_target_px": 535.1788851215981,
+  "measure_error": "",
+  "structural_pt": 0.0,
+  "structural_reason": "",
+  "layout_defects": [],
+  "label_pt_at_target": 9.240394864567335,
+  "smallest_text_pt": 9.240394864567335,
+  "width_driver": {
+   "role": "node",
+   "text": "Classifier",
+   "words": 1,
+   "width_px": 65.640625,
+   "measured": true
+  },
+  "text_runs": 22,
+  "findings": [
+   {
+    "severity": "warning",
+    "code": "oversized",
+    "detail": "20 nodes; past ~12 an overview should split into <thing>-overview plus one file per subprocess"
+   },
+   {
+    "severity": "nit",
+    "code": "direction",
+    "detail": "20 nodes left-to-right will be wide and shrink; top-down is usually taller and more legible \u2014 unless the nodes come in pairs"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\init-unterminated.mmd",
+  "index": 0,
+  "kind": "flowchart",
+  "direction": "LR",
+  "parsed": true,
+  "nodes": 2,
+  "edges": 1,
+  "node_labels": [
+   "Alpha",
+   "Beta"
+  ],
+  "max_label_words": 1,
+  "median_label_words": 1,
+  "long_labels": [],
+  "max_edge_words": 0,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 0,
+  "rendered": false,
+  "native_w": 0.0,
+  "native_h": 0.0,
+  "height_at_target_px": 0.0,
+  "measure_error": "",
+  "structural_pt": 0.0,
+  "structural_reason": "",
+  "layout_defects": [],
+  "label_pt_at_target": 0.0,
+  "smallest_text_pt": 0.0,
+  "width_driver": {},
+  "text_runs": 0,
+  "findings": [
+   {
+    "severity": "nit",
+    "code": "ado-init",
+    "detail": "%%{init}%% is rejected by ADO's mermaid; fine if an embed pipeline strips it (IME's does), otherwise move styling to classDef"
+   },
+   {
+    "severity": "blocker",
+    "code": "init-unterminated",
+    "detail": "a %%{init} directive with no closing }%% \u2014 whatever the renderer makes of it is not what was meant"
+   },
+   {
+    "severity": "blocker",
+    "code": "no-render",
+    "detail": "the diagram does not render:     at async renderMermaid (file:///C:/Users/corio/AppData/Roaming/npm/node_modules/@mermaid-js/mermaid-cli/src/index.js:480:22)"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\long-note.mmd",
+  "index": 0,
+  "kind": "state",
+  "direction": "",
+  "parsed": true,
+  "nodes": 2,
+  "edges": 1,
+  "node_labels": [
+   "A",
+   "B"
+  ],
+  "max_label_words": 1,
+  "median_label_words": 1,
+  "long_labels": [],
+  "max_edge_words": 0,
+  "long_edge_labels": [],
+  "long_notes": [
+   "This note goes on for a very long time indeed and says a great many words that nobody will read in a note because it is a paragraph."
+  ],
+  "back_edges": 0,
+  "multi_parent_nodes": 0,
+  "rendered": true,
+  "native_w": 376.0625,
+  "native_h": 330.0,
+  "height_at_target_px": 330.0,
+  "measure_error": "",
+  "structural_pt": 0.0,
+  "structural_reason": "",
+  "layout_defects": [],
+  "label_pt_at_target": 12.0,
+  "smallest_text_pt": 12.0,
+  "width_driver": {
+   "role": "node",
+   "text": "A",
+   "words": 1,
+   "width_px": 9.4375,
+   "measured": true
+  },
+  "text_runs": 3,
+  "findings": [
+   {
+    "severity": "warning",
+    "code": "long-note",
+    "detail": "1 note(s) over 20 words; a note is a caption, a paragraph goes in the prose"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\pie.mmd",
+  "index": 0,
+  "kind": "pie",
+  "direction": "",
+  "parsed": false,
+  "nodes": 0,
+  "edges": 0,
+  "node_labels": [],
+  "max_label_words": 0,
+  "median_label_words": 0.0,
+  "long_labels": [],
+  "max_edge_words": 0,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 0,
+  "rendered": true,
+  "native_w": 555.80078125,
+  "native_h": 450.0,
+  "height_at_target_px": 450.0,
+  "measure_error": "none of the 5 text runs could be identified as a node, edge or member label",
+  "structural_pt": 0.0,
+  "structural_reason": "",
+  "layout_defects": [],
+  "label_pt_at_target": 0.0,
+  "smallest_text_pt": 12.0,
+  "width_driver": {
+   "role": "title",
+   "text": "Share",
+   "words": 1,
+   "width_px": 44.0,
+   "measured": false
+  },
+  "text_runs": 5,
+  "findings": [
+   {
+    "severity": "warning",
+    "code": "unparsed",
+    "detail": "the tool does not extract entities from a pie diagram; node and edge counts are not available and a redraw cannot be verified by diff \u2014 verify by eye"
+   },
+   {
+    "severity": "blocker",
+    "code": "unmeasured",
+    "detail": "rendered, but legibility could not be measured: none of the 5 text runs could be identified as a node, edge or member label \u2014 no verdict; measure by eye or fix the renderer before trusting this diagram"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\seq-struck.mmd",
+  "index": 0,
+  "kind": "sequence",
+  "direction": "",
+  "parsed": true,
+  "nodes": 3,
+  "edges": 2,
+  "node_labels": [
+   "Client",
+   "Gateway",
+   "Service"
+  ],
+  "max_label_words": 1,
+  "median_label_words": 1,
+  "long_labels": [],
+  "max_edge_words": 10,
+  "long_edge_labels": [
+   "Forward the validated request with all headers to the service"
+  ],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 0,
+  "rendered": true,
+  "native_w": 650.0,
+  "native_h": 259.0,
+  "height_at_target_px": 248.64,
+  "measure_error": "",
+  "structural_pt": 11.52,
+  "structural_reason": "3 participants (150px boxes, 50px gaps: 650px)",
+  "layout_defects": [
+   "spanning-struck: message \"Forward the validated request with all headers to the servic\" spans 2 gaps and is centred on the lifeline between, which runs through the text; put the participants that talk side by side, or set sequence.messageAlign to left where the surface allows a directive",
+   "spanning-struck: message \"ok\" spans 2 gaps and is centred on the lifeline between, which runs through the text; put the participants that talk side by side, or set sequence.messageAlign to left where the surface allows a directive"
+  ],
+  "label_pt_at_target": 11.52,
+  "smallest_text_pt": 11.52,
+  "width_driver": {
+   "role": "edge",
+   "text": "Forward the validated request with all headers to the service",
+   "words": 10,
+   "width_px": 536.8000000000001,
+   "measured": false
+  },
+  "text_runs": 8,
+  "findings": [
+   {
+    "severity": "warning",
+    "code": "spanning-struck",
+    "detail": "message \"Forward the validated request with all headers to the servic\" spans 2 gaps and is centred on the lifeline between, which runs through the text; put the participants that talk side by side, or set sequence.messageAlign to left where the surface allows a directive"
+   },
+   {
+    "severity": "warning",
+    "code": "spanning-struck",
+    "detail": "message \"ok\" spans 2 gaps and is centred on the lifeline between, which runs through the text; put the participants that talk side by side, or set sequence.messageAlign to left where the surface allows a directive"
+   },
+   {
+    "severity": "warning",
+    "code": "verbose-edge-labels",
+    "detail": "1 edge/message label(s) over 3 words (longest 10); an edge carries a verb, not a sentence"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\seq7.mmd",
+  "index": 0,
+  "kind": "sequence",
+  "direction": "",
+  "parsed": true,
+  "nodes": 7,
+  "edges": 6,
+  "node_labels": [
+   "A",
+   "B",
+   "C",
+   "D",
+   "E",
+   "F",
+   "G"
+  ],
+  "max_label_words": 1,
+  "median_label_words": 1,
+  "long_labels": [],
+  "max_edge_words": 1,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 0,
+  "rendered": true,
+  "native_w": 1450.0,
+  "native_h": 435.0,
+  "height_at_target_px": 187.2,
+  "measure_error": "",
+  "structural_pt": 5.164137931034483,
+  "structural_reason": "7 participants (150px boxes, 50px gaps: 1450px)",
+  "layout_defects": [],
+  "label_pt_at_target": 5.164137931034483,
+  "smallest_text_pt": 5.164137931034483,
+  "width_driver": {
+   "role": "edge",
+   "text": "go",
+   "words": 1,
+   "width_px": 17.6,
+   "measured": false
+  },
+  "text_runs": 20,
+  "findings": [
+   {
+    "severity": "blocker",
+    "code": "illegible",
+    "detail": "labels print at 5.2pt at 6.5in wide; floor is 7.0pt"
+   },
+   {
+    "severity": "blocker",
+    "code": "needs-author",
+    "detail": "7 participants (150px boxes, 50px gaps: 1450px) fix a minimum width before any label is written: at 6.5in the best possible label is 5.2pt, under the 7.0pt floor; shortening labels cannot help \u2014 split by a boundary a reader would recognise"
+   },
+   {
+    "severity": "nit",
+    "code": "width-driver",
+    "detail": "the widest text is a edge label of 1 words (estimated 18px): \"go\" \u2014 shorten that, not the font"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\tall.mmd",
+  "index": 0,
+  "kind": "flowchart",
+  "direction": "TB",
+  "parsed": true,
+  "nodes": 41,
+  "edges": 40,
+  "node_labels": [
+   "Step 0",
+   "Step 1",
+   "Step 10",
+   "Step 11",
+   "Step 12",
+   "Step 13",
+   "Step 14",
+   "Step 15",
+   "Step 16",
+   "Step 17",
+   "Step 18",
+   "Step 19",
+   "Step 2",
+   "Step 20",
+   "Step 21",
+   "Step 22",
+   "Step 23",
+   "Step 24",
+   "Step 25",
+   "Step 26",
+   "Step 27",
+   "Step 28",
+   "Step 29",
+   "Step 3",
+   "Step 30",
+   "Step 31",
+   "Step 32",
+   "Step 33",
+   "Step 34",
+   "Step 35",
+   "Step 36",
+   "Step 37",
+   "Step 38",
+   "Step 39",
+   "Step 4",
+   "Step 40",
+   "Step 5",
+   "Step 6",
+   "Step 7",
+   "Step 8",
+   "Step 9"
+  ],
+  "max_label_words": 2,
+  "median_label_words": 2,
+  "long_labels": [],
+  "max_edge_words": 0,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 0,
+  "rendered": true,
+  "native_w": 129.28125,
+  "native_h": 4230.0,
+  "height_at_target_px": 4230.0,
+  "measure_error": "",
+  "structural_pt": 0.0,
+  "structural_reason": "",
+  "layout_defects": [],
+  "label_pt_at_target": 12.0,
+  "smallest_text_pt": 12.0,
+  "width_driver": {
+   "role": "node",
+   "text": "Step 10",
+   "words": 2,
+   "width_px": 53.28125,
+   "measured": true
+  },
+  "text_runs": 41,
+  "findings": [
+   {
+    "severity": "blocker",
+    "code": "tall",
+    "detail": "4230px tall at 6.5in wide, 4.9 pages of 864px; nobody scrolls a figure \u2014 split it"
+   },
+   {
+    "severity": "warning",
+    "code": "oversized",
+    "detail": "41 nodes; past ~12 an overview should split into <thing>-overview plus one file per subprocess"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\fp-after-204-deleted.md",
+  "index": 0,
+  "kind": "sequence",
+  "direction": "",
+  "parsed": true,
+  "nodes": 2,
+  "edges": 6,
+  "node_labels": [
+   "Client",
+   "Internal API"
+  ],
+  "max_label_words": 2,
+  "median_label_words": 2,
+  "long_labels": [],
+  "max_edge_words": 2,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 5,
+  "multi_parent_nodes": 1,
+  "rendered": true,
+  "native_w": 464.0,
+  "native_h": 435.0,
+  "height_at_target_px": 435.0,
+  "measure_error": "",
+  "structural_pt": 12.0,
+  "structural_reason": "2 participants (150px boxes, 50px gaps: 450px)",
+  "layout_defects": [],
+  "label_pt_at_target": 12.0,
+  "smallest_text_pt": 12.0,
+  "width_driver": {
+   "role": "edge",
+   "text": "GET /workorders/{id}",
+   "words": 2,
+   "width_px": 176.0,
+   "measured": false
+  },
+  "text_runs": 10,
+  "findings": []
+ },
+ {
+  "path": "gate-tests\\fp-after.md",
+  "index": 0,
+  "kind": "sequence",
+  "direction": "",
+  "parsed": true,
+  "nodes": 2,
+  "edges": 6,
+  "node_labels": [
+   "Client",
+   "Internal API"
+  ],
+  "max_label_words": 2,
+  "median_label_words": 2,
+  "long_labels": [],
+  "max_edge_words": 3,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 5,
+  "multi_parent_nodes": 1,
+  "rendered": true,
+  "native_w": 464.0,
+  "native_h": 435.0,
+  "height_at_target_px": 435.0,
+  "measure_error": "",
+  "structural_pt": 12.0,
+  "structural_reason": "2 participants (150px boxes, 50px gaps: 450px)",
+  "layout_defects": [],
+  "label_pt_at_target": 12.0,
+  "smallest_text_pt": 12.0,
+  "width_driver": {
+   "role": "edge",
+   "text": "GET /workorders/{id}",
+   "words": 2,
+   "width_px": 176.0,
+   "measured": false
+  },
+  "text_runs": 10,
+  "findings": []
+ },
+ {
+  "path": "gate-tests\\fp-before.md",
+  "index": 0,
+  "kind": "sequence",
+  "direction": "",
+  "parsed": true,
+  "nodes": 2,
+  "edges": 6,
+  "node_labels": [
+   "Client",
+   "InternalAPI"
+  ],
+  "max_label_words": 1,
+  "median_label_words": 1,
+  "long_labels": [],
+  "max_edge_words": 6,
+  "long_edge_labels": [
+   "200 OK woDetail.Installer_ID, Contoso.Ins\u2026",
+   "GET /api/v2/workorders/123 (e.g. a Lowe's order)"
+  ],
+  "long_notes": [],
+  "back_edges": 5,
+  "multi_parent_nodes": 1,
+  "rendered": true,
+  "native_w": 641.0,
+  "native_h": 435.0,
+  "height_at_target_px": 423.46333853354133,
+  "measure_error": "",
+  "structural_pt": 12.0,
+  "structural_reason": "2 participants (150px boxes, 50px gaps: 450px)",
+  "layout_defects": [],
+  "label_pt_at_target": 11.681747269890796,
+  "smallest_text_pt": 11.681747269890796,
+  "width_driver": {
+   "role": "edge",
+   "text": "GET /api/v2/workorders/123 (e.g. a Lowe's order)",
+   "words": 6,
+   "width_px": 422.40000000000003,
+   "measured": false
+  },
+  "text_runs": 10,
+  "findings": [
+   {
+    "severity": "warning",
+    "code": "verbose-edge-labels",
+    "detail": "2 edge/message label(s) over 3 words (longest 6); an edge carries a verb, not a sentence"
+   }
+  ]
+ },
+ {
+  "path": "gate-tests\\gv-overflow.gv",
+  "index": 0,
+  "kind": "graphviz",
+  "direction": "",
+  "parsed": true,
+  "nodes": 2,
+  "edges": 1,
+  "node_labels": [
+   "A very long label that cannot fit",
+   "b"
+  ],
+  "max_label_words": 7,
+  "median_label_words": 7,
+  "long_labels": [
+   "A very long label that cannot fit"
+  ],
+  "max_edge_words": 0,
+  "long_edge_labels": [],
+  "long_notes": [],
+  "back_edges": 0,
+  "multi_parent_nodes": 0,
+  "rendered": true,
+  "native_w": 51.0,
+  "native_h": 116.0,
+  "height_at_target_px": 116.0,
+  "measure_error": "",
+  "structural_pt": 0.0,
+  "structural_reason": "",
+  "layout_defects": [
+   "overflow: label \"A very long label that cannot fit\" (194px) is wider than its 43px shape"
+  ],
+  "label_pt_at_target": 10.5,
+  "smallest_text_pt": 10.5,
+  "width_driver": {
+   "role": "node",
+   "text": "A very long label that cannot fit",
+   "words": 7,
+   "width_px": 254.10000000000002,
+   "measured": false
+  },
+  "text_runs": 2,
+  "findings": [
+   {
+    "severity": "blocker",
+    "code": "overflow",
+    "detail": "label \"A very long label that cannot fit\" (194px) is wider than its 43px shape"
+   },
+   {
+    "severity": "warning",
+    "code": "verbose-labels",
+    "detail": "1 node label(s) over 3 words (longest 7); long labels widen nodes, and width is what forces the render to shrink"
+   }
+  ]
+ }
+]

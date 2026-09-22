@@ -1,0 +1,6 @@
+sequenceDiagram
+  participant A as Client
+  participant B as Gateway
+  participant C as Service
+  A->>C: Forward the validated request with all headers to the service
+  C-->>A: ok

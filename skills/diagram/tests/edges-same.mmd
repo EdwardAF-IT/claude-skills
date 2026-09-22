@@ -1,0 +1,18 @@
+flowchart LR
+  A[Alpha] --> B[Beta]
+  B --> C[Gamma]
+  C -->|yes| D{Delta} -- no --> E([Eps])
+  endpoint[Endpoint] --> classifier[Classifier]
+  A & B --> F[Fan in]
+  F --> G[G] & H[H]
+  H:::warn --> I@{shape: circle, label: "I"}
+  J -.-> K
+  K ==> L
+  L ~~~ M
+  N-->O
+  subgraph S [Sub]
+    direction TB
+    P --> Q
+  end
+  Q --> S
+  classDef warn fill:#f96

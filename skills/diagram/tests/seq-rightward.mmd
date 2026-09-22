@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    participant Engine as WaveEngine gate
+    participant Broker as ExecutionBroker
+    participant Scope as ScopeResolver
+    participant Store as VerdictStore
+    participant Place as Placement and leases
+    participant Sat as Satellite living2
+    participant Accept as AcceptancePolicy
+    Engine->>Broker: SubmitJob Verify for item 1337, scope affected
+    Broker->>Scope: ResolveScope affected
+    Scope-->>Broker: phases Orchestra and Cli
+    Broker->>Store: Find each phase key
+    Store-->>Broker: Cli served from the corpus proof, Orchestra missing
+    Broker->>Place: Place Orchestra phase
+    Place-->>Broker: living2 first, local second
+    Broker->>Place: Lease living2 exclusive
+    Place-->>Broker: granted, run clock starts
+    Broker->>Sat: mirror the tree, run the phase
+    Sat-->>Broker: Failed, two named tests, environment fingerprint
+    Broker->>Store: Record verdict with provenance
+    Broker->>Place: release lease, reap the mirror results
+    Broker-->>Engine: JobResult with both verdicts
+    Engine->>Accept: Accepts BaseComparison, item verdict against base verdict
+    Accept-->>Engine: base proven in another class, rerun the two tests here
+    Engine->>Broker: SubmitJob Verify scoped to two tests on the base commit
+    Broker-->>Engine: Failed here too, provenance same class
+    Engine->>Accept: Accepts LaneTrust
+    Accept-->>Engine: NotEvidence, environment failure, no attempt counted

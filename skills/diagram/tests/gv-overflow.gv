@@ -1,0 +1,6 @@
+digraph G {
+  node [shape=box fixedsize=true width=0.6]
+  a [label="A very long label that cannot fit"]
+  b [label="b"]
+  a -> b
+}
