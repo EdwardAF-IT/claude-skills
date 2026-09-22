@@ -37,7 +37,8 @@ written, and names the other sessions on this checkout — then stops and waits.
      unknown>"
    - dirty files the note does not claim → "another session's work in progress; not touched"
    - branches, agents, cron entries or PRs the note says are in flight → check each still exists
-     (`git branch`, `CronList`, `gh pr view`) and report what did not survive
+     (`git -C <repo> branch`, `CronList`, `gh pr view -R <owner/repo>`) and report what did not
+     survive
    - a checkpoint newer than the handoff for the same work overrides the handoff's "where things
      stand"; say which note won
 
@@ -54,6 +55,11 @@ written, and names the other sessions on this checkout — then stops and waits.
 
 ## Rules
 
+- **Never change the working directory** — not with `cd`, not with the directory tool. A `cd`
+  inside a Bash call moves the session there for good, and a pickup reads several repos — the note's, the sibling sessions', the one the work
+  is about. Reach every one of them in place: `git -C <repo> ...`, `latest.py --root <repo>`,
+  absolute paths for Read and Grep. The session ends the pickup where it started it. If the work
+  genuinely belongs in another folder, say so in the brief and let the user move.
 - Never call AskUserQuestion; every ambiguity is stated in the brief with the reading chosen.
 - Never treat a sibling session's dirty files as abandoned; they are theirs until that session's
   note or the user says otherwise.
