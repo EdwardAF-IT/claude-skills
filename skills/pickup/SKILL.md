@@ -1,13 +1,13 @@
 ---
-name: resume
-description: Pick up a repo where a previous session left it - find the right handoff or checkpoint note for this checkout, reconcile it with what git and the other live sessions have done since, and brief the user in a few lines before touching anything. Use when he says "resume", "resume <name>", "pick up where we left off", "where were we", "get up to speed", "read the handoff", "catch me up", or starts a session by pointing at a handoff file.
+name: pickup
+description: Pick up a repo where a previous session left it - find the right handoff or checkpoint note for this checkout, reconcile it with what git and the other live sessions have done since, and brief the user in a few lines before touching anything. Use when he says "pickup", "pickup <name>", "pick up where we left off", "where were we", "resume", "get up to speed", "read the handoff", "catch me up", or starts a session by pointing at a handoff file.
 ---
 
-# Resume
+# Pickup
 
 The mirror of [[handoff]] and [[checkpoint]]. Several sessions work the same repo, each writes
 its own note, and the notes pile up in two folders; the one at the top of the list is not
-necessarily this session's. A resume finds the right note, says what has moved since it was
+necessarily this session's. A pickup finds the right note, says what has moved since it was
 written, and names the other sessions on this checkout — then stops and waits.
 
 ## Steps — derive everything, ask nothing
@@ -17,14 +17,14 @@ written, and names the other sessions on this checkout — then stops and waits.
    since the newest one:
 
    ```bash
-   python ~/.claude/skills/resume/scripts/latest.py [name]
+   python ~/.claude/skills/pickup/scripts/latest.py [name]
    ```
 
    Every handoff and checkpoint carries a name in its banner (`# Handoff <date> · <name>`). With
-   `resume <name>` the finder returns the newest note of that name and that is the note; the
+   `pickup <name>` the finder returns the newest note of that name and that is the note; the
    other names in the listing are sibling sessions', reported as such and never merged in. With
    no name and several recent notes, list the names and pick the one whose goal fits this
-   session's title and recent conversation, saying which and why in one line; a bare `resume`
+   session's title and recent conversation, saying which and why in one line; a bare `pickup`
    with one recent note takes it.
 
 2. **List the other sessions on this checkout** — `list_sessions` from the session tools, filtered

@@ -30,7 +30,7 @@ Use [[handoff]] instead when the work is actually stopping.
    **untracked** location, so a long run never spams a gated repo with commits. `<name>` is the
    argument given, else the name of the handoff this work continues, else omitted. Overwrite the
    same file on every checkpoint that day; it is a rolling "current state", not a journal. The
-   banner carries the name after a middle dot so `resume <name>` finds it. Keep it under ~40 lines:
+   banner carries the name after a middle dot so `pickup <name>` finds it. Keep it under ~40 lines:
 
    ```markdown
    # Checkpoint <yyyy-mm-dd hh:mm> · <name>

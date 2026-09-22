@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: End a work session cleanly - write a handoff note the next session can resume from, persist durable learnings to memory, and tell the user how to resume. Use when the user says "handoff", "wrap up", "I'm done for today", or "hand this off"; an argument names the note ("handoff doc-pipeline") so `resume <name>` finds it. For a snapshot taken while work CONTINUES (leaving overnight with tasks running, or before a compaction mid-run), use the checkpoint skill instead.
+description: End a work session cleanly - write a handoff note the next session can resume from, persist durable learnings to memory, and tell the user how to resume. Use when the user says "handoff", "wrap up", "I'm done for today", or "hand this off"; an argument names the note ("handoff doc-pipeline") so `pickup <name>` finds it. For a snapshot taken while work CONTINUES (leaving overnight with tasks running, or before a compaction mid-run), use the checkpoint skill instead.
 ---
 
 # Handoff
@@ -24,7 +24,7 @@ says the work is stopping.
 2. **Write the handoff note** to `docs/handoffs/<yyyy-mm-dd>-<name>.md` inside the repo
    if a `docs/` folder exists, otherwise to `.claude/handoffs/` (lowercase filenames only).
    `<name>` is the argument the user gave (`handoff doc-pipeline`), else a short slug you choose;
-   it goes in the banner too, after a middle dot, so `resume <name>` can find this note among
+   it goes in the banner too, after a middle dot, so `pickup <name>` can find this note among
    the notes other sessions leave in the same folder. Reuse the name a previous handoff or
    checkpoint of the same work used. Structure - keep it under ~80 lines, facts not narrative:
 
@@ -51,7 +51,7 @@ says the work is stopping.
    already approved editing that file this session.
 
 5. **Reply** with: the handoff file path, the one-line resume instruction (`claude --continue` for
-   the same session, or `claude` + "resume <name>" for a fresh one), and any open
+   the same session, or `claude` + "pickup <name>" for a fresh one), and any open
    question the user must answer before the next session can proceed unattended. If the day's
    `.claude/checkpoints/` note exists, fold its contents in and say so.
 
