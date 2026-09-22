@@ -43,6 +43,10 @@ written, and names the other sessions on this checkout — then stops and waits.
      stand"; say which note won
 
 4. **Brief the user**, under fifteen lines:
+   - **where this session is standing** — the cwd — whenever it is not the folder the note's work
+     lives in, plus what that costs (a repo's hooks and gates load at session start and follow the
+     session even if the directory moves). One line, first. The app does not always open a session
+     in the folder that was picked, so this is a fact to state, never an assumption.
    - which note was used, and which others were passed over and whose they are
    - goal, where things stand, in flight (only what still exists)
    - what moved since the note, and who moved it
