@@ -27,7 +27,7 @@ test('the builder derives its plate geometry from geometry.json', () => {
   assert.ok(Math.abs(PORTRAIT.boxIn - 9.85) < 1e-9);
   assert.ok(Math.abs(PORTRAIT.columnIn - 3.4458) < 1e-3);
   assert.ok(Math.abs(LANDSCAPE.measureIn - 10.2) < 1e-9);
-  assert.ok(Math.abs(LANDSCAPE.boxIn - 7.63) < 1e-9);
+  assert.ok(Math.abs(LANDSCAPE.boxIn - 7.53) < 1e-9);   // 8.5 less 0.4 top, 0.55 bottom (the folio), 0.02 safety
 });
 
 test('magazine.css states the same portrait page as geometry.json', () => {
@@ -42,11 +42,25 @@ test('magazine.css states the same portrait page as geometry.json', () => {
 
 test('magazine.css states the same landscape plate page as geometry.json', () => {
   assert.equal(prop(rule('.landscape .page', 'width'), 'width'), `${l.pageIn.width}in`);
-  const plate = css.match(/@page plate\s*\{[^}]*margin:\s*([\d.]+)in;/);
+  const plate = css.match(/@page plate\s*\{[^}]*margin:\s*([^;]+);/);
   assert.ok(plate, 'no @page plate rule');
-  assert.equal(Number(plate[1]), GEOMETRY.plateLandscapeMarginIn);
+  assert.deepEqual(inches(plate[1]),
+    [GEOMETRY.plateLandscapeMarginIn, GEOMETRY.plateLandscapeMarginIn, l.marginIn.bottom]);
   const platePage = rule('.plate-page', 'width');
   const measure = l.pageIn.width - 2 * GEOMETRY.plateLandscapeMarginIn;
   assert.equal(prop(platePage, 'width'), `${measure}in`);
   assert.equal(prop(platePage, 'margin-left'), `-${measure / 2}in`);
+});
+
+// A printer cannot reach the last ~0.25in of the sheet. The folio hangs from the top of the bottom
+// margin, so a 0.55in margin keeps its lower edge ~0.35in from the paper's edge; a smaller margin,
+// or a folio centred in it, printed with its lower half cut off (2026-09-22).
+const FOLIO_MARGIN_MIN_IN = 0.55;
+
+test('every page leaves the folio clear of the edge a printer cannot reach', () => {
+  assert.ok(p.marginIn.bottom >= FOLIO_MARGIN_MIN_IN, `portrait bottom ${p.marginIn.bottom}in`);
+  assert.ok(l.marginIn.bottom >= FOLIO_MARGIN_MIN_IN, `landscape bottom ${l.marginIn.bottom}in`);
+  const folio = css.match(/@bottom-right\s*\{([^}]*)\}/);
+  assert.ok(folio, 'no folio margin box');
+  assert.match(folio[1], /vertical-align:\s*top/, 'the folio hangs from the top of the margin');
 });

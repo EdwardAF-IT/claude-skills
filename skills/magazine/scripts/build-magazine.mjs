@@ -1595,9 +1595,12 @@ function build(opts) {
     return cut.slice(0, Math.max(cut.lastIndexOf(' '), max - 12)).replace(/[\s,;:.–—-]+$/, '') + '…';
   };
   const folio = `\n@media print { @page { @bottom-right { content: ${cssString(shortTitle(title) + '  ·  ')} counter(page); } } }\n`;
-  // A landscape edition's page box is what LANDSCAPE in the plate geometry assumes: 0.4in sides
-  // and top, 0.45in below for the folio.
-  const pageSize = landscape ? '\n@media print { @page { size: letter landscape; margin: 0.4in 0.4in 0.45in; } }\n' : '';
+  // A landscape edition's page box is the one LANDSCAPE assumes, read from geometry.json, never
+  // restated here: a literal copy once drifted from the file it was meant to match.
+  const lm = LANDSCAPE.marginIn;
+  const pageSize = landscape
+    ? `\n@media print { @page { size: letter landscape; margin: ${lm.top}in ${lm.side}in ${lm.bottom}in; } }\n`
+    : '';
 
   const date = printedDate();
   const bodyClass = [

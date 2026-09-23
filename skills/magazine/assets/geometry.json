@@ -11,7 +11,7 @@
   },
   "landscape": {
     "pageIn": { "width": 11, "height": 8.5 },
-    "marginIn": { "top": 0.4, "side": 0.4, "bottom": 0.45 },
+    "marginIn": { "top": 0.4, "side": 0.4, "bottom": 0.55 },
     "sideIn": 3.0
   },
   "plateLandscapeMarginIn": 0.4
