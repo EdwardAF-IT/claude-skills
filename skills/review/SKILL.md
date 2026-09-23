@@ -203,6 +203,10 @@ design — nothing detected the drift or said so in the output.
    persona, findings that survived verification, elapsed, what is next.
 6. **After the last persona**, run the consolidation pass: verify, dedup, rank, and write
    `<date>/findings.md` at the resolved location.
+7. **End the round in chat, not in a file.** Print the foundational shortlist — one line per
+   finding: what, `file:line`, smallest fix — then the counts (other findings, dropped in
+   verification), then a clickable link to `findings.md`. He should never have to go looking for
+   what the board found; the file is the full record, the chat is the answer.
 
 ## The output contract every persona must follow
 
@@ -237,7 +241,7 @@ duplicated"* is not a finding. Two similar implementations are a watch item; thr
 - **Rank foundational first**, then by severity, then by cost to fix.
 - **Cap the headline list.** If a round produces eighty findings, lead with the foundational ones
   and put the rest behind a count. His review of 2026-09-04 produced 57 rows and he remediated only
-  the foundational ones; give him that shortlist directly.
+  the foundational ones; give him that shortlist directly, in chat (step 7).
 - **Name what the board did not look at** — scope excluded, personas skipped, budget exhausted.
 
 ## Recording dispositions
