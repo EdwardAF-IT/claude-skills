@@ -137,8 +137,27 @@ def magazine_target_renders_as_the_magazine_does():
         assert got == (int(m.group(1)), int(m.group(2))), (got, m.group(0))
 
 
+def tall_figure_measures_what_the_magazine_prints():
+    """A figure the magazine shrinks to the page height is measured at that size, not its
+    width-only size: the gate and a real build report the same label size, per edition kind."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        doc = tmp / "tall.md"
+        doc.write_text("# T\n\n```mermaid\n" + (HERE / "tall.mmd").read_text(encoding="utf-8") + "\n```\n", encoding="utf-8")
+        for kind in ("feature", "brief"):
+            _, out = run("check", "tall.mmd", "--target", "magazine", "--kind", kind, "--json", str(tmp / "r.json"))
+            rep = json.loads((tmp / "r.json").read_text(encoding="utf-8"))[0]
+            r = subprocess.run(["node", str(BUILDER), "--out", str(tmp / "t.html"), "--kind", kind, str(doc)],
+                               capture_output=True, text=True, encoding="utf-8", timeout=300)
+            m = re.search(r"labels (\d+\.\d)pt", r.stdout)
+            assert m, r.stdout + r.stderr
+            assert f"{rep['label_pt_at_target']:.1f}" == m.group(1), (kind, rep["label_pt_at_target"], m.group(0))
+            assert rep["label_pt_at_target"] < 7.0 and "illegible" in out and "placed as" in out, out
+
+
 CHECKS = [
     ("every fence shape gets the shared answer (fences.json, tests/fences)", fences_match_the_shared_answer),
+    ("a tall figure measures at the size the magazine prints it, not its width-only size", tall_figure_measures_what_the_magazine_prints),
     ("one presence rule with the edit gate: every shared case gets the same verdict", presence_matches_the_shared_cases),
     ("--target magazine measures with the magazine's own mermaid config", magazine_target_renders_as_the_magazine_does),
 ]

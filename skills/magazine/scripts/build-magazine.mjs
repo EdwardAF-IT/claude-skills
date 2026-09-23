@@ -41,6 +41,10 @@
  *   node build-magazine.mjs --mermaid-config <out.json> [--accent ...] [--css ...]
  *                         Write the mermaid config the plates render with and build nothing;
  *                         the diagram skill's magazine target measures with it.
+ *   node build-magazine.mjs --place <w>x<h> [--kind k] [--label-cap pt]
+ *                         Print, as JSON, where a figure of that native SVG size is placed and
+ *                         at what scale; build nothing. The diagram skill's magazine target
+ *                         measures label size with this scale, so both report what prints.
  *   --no-verify           Skip the fidelity check (never for a shipped edition)
  */
 
@@ -189,6 +193,7 @@ function parseArgs(argv) {
       case '--label-cap': o.labelCap = Number(val()); break;
       case '--css': o.css = val(); break;
       case '--mermaid-config': o.mermaidConfigOut = val(); break;
+      case '--place': o.place = val(); break;
       case '--no-verify': o.verify = false; break;
       default:
         if (a.startsWith('--')) throw new Error(`unknown option: ${a}`);
@@ -196,10 +201,11 @@ function parseArgs(argv) {
     }
   }
   if (o.accent && !/^#[0-9a-fA-F]{6}$/.test(o.accent)) throw new Error('--accent takes a #rrggbb color');
+  if (o.kind && !KINDS[o.kind]) throw new Error(`--kind must be one of ${Object.keys(KINDS).join(', ')}`);
   if (o.mermaidConfigOut) return o;   // writes the plates' mermaid config and builds nothing
+  if (o.place) return o;              // reports one figure's placement and builds nothing
   if (!o.out) throw new Error('--out <file.html> is required');
   if (!o.inputs.length) throw new Error('at least one markdown file is required');
-  if (o.kind && !KINDS[o.kind]) throw new Error(`--kind must be one of ${Object.keys(KINDS).join(', ')}`);
   return o;
 }
 
@@ -1671,9 +1677,36 @@ const isMain = (() => {
   return Boolean(entry) && import.meta.url === pathToFileURL(entry).href;
 })();
 
+/**
+ * Where a figure of a given native SVG size prints, and at what scale — the same placePlate a
+ * build runs, so a measurement taken with this scale is the label size the reader gets.
+ * @param {string} spec   native size as "<w>x<h>" in SVG px
+ * @param {string} [kindName]  an edition kind; feature when omitted
+ * @param {number} [labelCap]  overrides the label cap, as --label-cap does for a build
+ * @returns {{cls: string, scale: number, labelPt: number, wIn: number, hIn: number}}
+ * @throws {Error} on a malformed size or an unknown kind
+ */
+export function placementFor(spec, kindName = 'feature', labelCap = null) {
+  const m = /^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/.exec(String(spec));
+  if (!m || Number(m[1]) <= 0 || Number(m[2]) <= 0) throw new Error(`--place takes <w>x<h> in px, got ${spec}`);
+  if (!KINDS[kindName]) throw new Error(`--kind must be one of ${Object.keys(KINDS).join(', ')}`);
+  const savedCap = PAGE.labelCapPt;
+  if (labelCap) PAGE.labelCapPt = labelCap;
+  try {
+    const p = placePlate({ w: Number(m[1]), h: Number(m[2]) }, labelPx(), KINDS[kindName]);
+    return { cls: p.cls, scale: p.scale, labelPt: p.labelPt, wIn: p.wIn, hIn: p.hIn };
+  } finally {
+    PAGE.labelCapPt = savedCap;
+  }
+}
+
 function main() {
   try {
     const opts = parseArgs(process.argv.slice(2));
+    if (opts.place) {
+      console.log(JSON.stringify(placementFor(opts.place, opts.kind || 'feature', opts.labelCap)));
+      return;
+    }
     if (opts.mermaidConfigOut) {
       const css = readFileSync(opts.css ? opts.css : DEFAULT_CSS, 'utf8');
       writeFileSync(opts.mermaidConfigOut, JSON.stringify(mermaidConfig(paletteOf(css, opts.accent)), null, 2), 'utf8');

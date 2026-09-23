@@ -162,6 +162,7 @@ class DiagramReport:
     measure_error: str = ""              # set when the render could not be measured: the gate refuses
     structural_pt: float = 0.0           # the best any label can do given the diagram's fixed geometry
     structural_reason: str = ""          # what fixes that geometry ("6 participants")
+    placement: str = ""                  # magazine target only: the builder's placement class
     layout_defects: list[str] = field(default_factory=list)  # overflow and strike-through, measured
     label_pt_at_target: float = 0.0      # smallest node/edge/member text at the target width
     smallest_text_pt: float = 0.0        # smallest text of any role, for the record
@@ -710,6 +711,33 @@ def magazine_mermaid_config(workdir: Path) -> tuple[Path | None, dict, str]:
     return out, cfg, ""
 
 
+_magazine_placements: dict[tuple[float, float, str | None], dict] = {}
+
+
+def magazine_placement(native_w: float, native_h: float, kind: str | None) -> tuple[dict | None, str]:
+    """(placement, complaint): where the magazine builder itself places a figure of this native
+    size, and at what scale — asked of the builder, never re-derived here, so a tall figure shrunk
+    to the page height measures at the size it prints, not at its width-only size."""
+    key = (round(native_w, 2), round(native_h, 2), kind)
+    if key in _magazine_placements:
+        return _magazine_placements[key], ""
+    node = _tool("node")
+    if not node or not MAGAZINE_BUILD.exists():
+        return None, f"the magazine target needs node and {MAGAZINE_BUILD}"
+    cmd = [node, str(MAGAZINE_BUILD), "--place", f"{native_w:.2f}x{native_h:.2f}"]
+    if kind:
+        cmd += ["--kind", kind]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            return None, f"the magazine builder could not place the figure: {(r.stderr or r.stdout).strip()[:200]}"
+        placement = json.loads(r.stdout)
+    except Exception as exc:
+        return None, f"the magazine builder could not place the figure: {str(exc)[:200]}"
+    _magazine_placements[key] = placement
+    return placement, ""
+
+
 def render_svg(src: str, kind: str, workdir: Path, stem: str,
                config: Path | None = None) -> tuple[Path | None, str]:
     """Render to SVG; return (path or None, the renderer's complaint when it failed). A mermaid
@@ -1068,9 +1096,12 @@ def _check_measure_status(rep: DiagramReport) -> bool:
 def _check_legibility(rep: DiagramReport, target: str) -> None:
     """Legibility, the thing that costs him manual labour."""
     if rep.label_pt_at_target < LABEL_FLOOR_PT:
+        # The magazine names the placement it chose: a tall figure is shrunk by the page height,
+        # not the width, and the cure (split it) differs from shortening labels.
+        where = (f"placed as the magazine's '{rep.placement}'" if rep.placement
+                 else f"at {TARGETS[target]}in wide")
         rep.add("blocker", "illegible",
-                f"labels print at {rep.label_pt_at_target:.1f}pt at {TARGETS[target]}in "
-                f"wide; floor is {LABEL_FLOOR_PT}pt")
+                f"labels print at {rep.label_pt_at_target:.1f}pt {where}; floor is {LABEL_FLOOR_PT}pt")
     elif rep.label_pt_at_target < LABEL_TARGET_PT:
         rep.add("warning", "tight",
                 f"labels print at {rep.label_pt_at_target:.1f}pt; target is {LABEL_TARGET_PT}pt")
@@ -1232,7 +1263,9 @@ def _sequence_geometry(config: dict) -> tuple[float, float, float]:
     return float(seq.get("width", SEQ_ACTOR_W)), float(seq.get("actorMargin", SEQ_ACTOR_MARGIN)), font_px
 
 
-def analyse(path: Path, target: str, workdir: Path) -> list[DiagramReport]:
+def analyse(path: Path, target: str, workdir: Path, kind: str | None = None) -> list[DiagramReport]:
+    """kind: the magazine edition kind (feature, brief, dashboard) whose placement rules measure
+    the magazine target; None lets the builder use its default."""
     reports: list[DiagramReport] = []
     config_file, config, config_error = None, {}, ""
     if target == "magazine":
@@ -1285,6 +1318,15 @@ def analyse(path: Path, target: str, workdir: Path) -> list[DiagramReport]:
             rep.native_w, rep.native_h, runs, rep.layout_defects = measure_svg(svg, rep.kind, TARGETS[target])
             rep.text_runs = len(runs)
             scale = min(1.0, (TARGETS[target] * 96.0) / rep.native_w) if rep.native_w else 1.0
+            if target == "magazine" and rep.native_w and rep.native_h:
+                # The magazine fits a plate to the page height as well as the width, and picks
+                # among column, tall, turned and landscape placements: its scale is what prints.
+                placement, place_error = magazine_placement(rep.native_w, rep.native_h, kind)
+                if placement:
+                    scale = placement["scale"]
+                    rep.placement = placement["cls"]
+                else:
+                    rep.measure_error = place_error   # fail closed, like the config above
             rep.height_at_target_px = rep.native_h * scale
             label_runs = [r for r in runs if r.role in ("node", "edge", "member")]
             # fail closed: no width, or text the tool cannot place in a role, is not a pass
@@ -1354,7 +1396,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
         all_reports: list[DiagramReport] = []
         for n, path in enumerate(files, 1):
             try:
-                found = analyse(path, args.target, workdir)
+                found = analyse(path, args.target, workdir, args.kind)
             except Exception as exc:  # a broken file is a finding, not a crash
                 rep = DiagramReport(path=str(path))
                 rep.add("blocker", "audit-error", f"{type(exc).__name__}: {exc}")
@@ -1786,7 +1828,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
 def cmd_check(args: argparse.Namespace) -> int:
     with tempfile.TemporaryDirectory(prefix="diagram-check-") as tmp:
-        reports = analyse(Path(args.path), args.target, Path(tmp))
+        reports = analyse(Path(args.path), args.target, Path(tmp), args.kind)
     worst = "clean"
     for r in reports:
         d = r.width_driver
@@ -1818,6 +1860,7 @@ def main() -> int:
     a.add_argument("path")
     a.add_argument("--target", choices=sorted(TARGETS), default="md")
     a.add_argument("--json")
+    a.add_argument("--kind", help="magazine target: the edition kind whose placement rules apply (the builder validates it)")
     a.add_argument("--limit", type=int, default=100000)
     a.add_argument("--verbose", action="store_true")
     a.add_argument("--exclude", action="append", help="glob or substring of paths to skip (repeatable)")
@@ -1839,6 +1882,7 @@ def main() -> int:
     c.add_argument("path")
     c.add_argument("--target", choices=sorted(TARGETS), default="md")
     c.add_argument("--json")
+    c.add_argument("--kind", help="magazine target: the edition kind whose placement rules apply (the builder validates it)")
     c.set_defaults(func=cmd_check)
 
     args = ap.parse_args()

@@ -66,6 +66,12 @@ realistic surface — a wiki column, a printed page inside its margins, a narrow
 diagram legible there is legible everywhere. Widening it is closed as a question; a diagram under
 the floor at 6.5in needs authoring, not a wider ruler.
 
+**The magazine target measures what prints.** A wiki scrolls, so there a figure is fit to the
+width only; a printed page does not, and the magazine shrinks a tall figure to the page height.
+`--target magazine` asks the builder itself where it would place the figure (`--place`) and
+measures at that scale, so the gate and the edition report one label size; pass `--kind` when the
+edition's kind is known, as the publish board does.
+
 **The real constraint is said first.** Six sequence participants are six 150px boxes and five
 50px gaps before a single message is written, and at 6.5in that is already under the floor: the
 audit says `needs-author` with the participant count up front, so nobody spends a round shortening

@@ -121,11 +121,13 @@ def _require_tool(stage: str, tool: Path) -> StageResult | None:
 
 # ---------------------------------------------------------------- stage 1: diagram
 
-def stage_diagram(doc: Path, before: Path | None) -> StageResult:
+def stage_diagram(doc: Path, before: Path | None, kind: str | None = None) -> StageResult:
     missing = _require_tool('diagram', DIAGRAM_AUDIT)
     if missing:
         return missing
-    code, out = run([sys.executable, str(DIAGRAM_AUDIT), 'check', str(doc), '--target', 'magazine'])
+    # Measured with the same edition kind the magazine stage builds, so both place a figure alike.
+    cmd = [sys.executable, str(DIAGRAM_AUDIT), 'check', str(doc), '--target', 'magazine']
+    code, out = run(cmd + (['--kind', kind] if kind else []))
     if _crashed(code, out, (0, 1, 2)):
         return StageResult('diagram', False, f'audit.py check crashed, exit {code}',
                             [Ticket('diagram', 'diagram', f'audit.py check crashed: {_tail(out)}')], out)
@@ -141,13 +143,13 @@ def stage_diagram(doc: Path, before: Path | None) -> StageResult:
         f = re.match(r'^\s*\[(blocker|warning)\]\s+([a-z-]+):\s*(.*)$', line)
         if not f:
             continue
-        level, kind, text = f.groups()
+        level, finding, text = f.groups()
         # What needs the author, not a redraw: a figure whose participants or entities make it
         # illegible at any width, or one the tool cannot parse to verify.
-        if kind in ('needs-author',):
-            tickets.append(Ticket('diagram', 'write', f'{kind}: {text[:140]}', figure or ''))
+        if finding in ('needs-author',):
+            tickets.append(Ticket('diagram', 'write', f'{finding}: {text[:140]}', figure or ''))
         elif level == 'blocker':
-            tickets.append(Ticket('diagram', 'diagram', f'{kind}: {text[:140]}', figure or ''))
+            tickets.append(Ticket('diagram', 'diagram', f'{finding}: {text[:140]}', figure or ''))
     if code == 2 and not any(t.to_stage == 'diagram' for t in tickets):
         # The gate itself says blocker (exit 2); if no blocker line parsed, the parser drifted
         # from the tool's own wording — that is still red, not a silent pass.
@@ -305,7 +307,7 @@ def cmd_board(args) -> int:
     before = Path(args.before).resolve() if args.before else None
     out_path = Path(args.out).resolve() if args.out else doc.with_name(doc.stem + '-print.html')
     results = [
-        stage_diagram(doc, before),
+        stage_diagram(doc, before, args.kind),
         stage_edit(doc, before),
         stage_magazine(doc, out_path, args.kind, build=not args.no_build),
     ]

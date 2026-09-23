@@ -261,6 +261,22 @@ def _():
     assert pub.LABEL_FLOOR_PT == pub._load_const(pub.DIAGRAM_AUDIT, 'LABEL_FLOOR_PT', sentinel)
 
 
+@case('the board measures diagrams with the edition kind the magazine stage builds')
+def _():
+    saved = pub.DIAGRAM_AUDIT
+    pub.DIAGRAM_AUDIT = FIXTURES / 'stub-audit-echo.py'
+    try:
+        with fixture_dir() as d:
+            doc = Path(d) / 'doc.md'
+            doc.write_text('# T\n\nBody.\n', encoding='utf-8')
+            with_kind = pub.stage_diagram(doc, None, 'brief')
+            without = pub.stage_diagram(doc, None)
+    finally:
+        pub.DIAGRAM_AUDIT = saved
+    assert '--target magazine --kind brief' in with_kind.output, with_kind.output
+    assert '--kind' not in without.output, without.output
+
+
 @case('sibling tools resolve relative to publish.py, not a hard-coded ~/.claude/skills (finding 9)')
 def _():
     assert pub.DIAGRAM_AUDIT == pub.SKILLS_DIR / 'diagram' / 'scripts' / 'audit.py'
