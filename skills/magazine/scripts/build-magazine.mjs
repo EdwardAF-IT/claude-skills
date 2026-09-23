@@ -1054,7 +1054,7 @@ function normaliseMermaid(src, ctx) {
 
 // The page geometry the plate rules are computed against, per orientation, derived from
 // assets/geometry.json — the one home of the page's numbers, which magazine.css is pinned to by
-// tests/geometry.test.mjs and the diagram skill's magazine target reads too.
+// tests/geometry.test.mjs. The diagram skill never reads it: it asks placementFor (--place).
 function pageGeometry(orientation) {
   const g = GEOMETRY[orientation];
   const m = g.marginIn;

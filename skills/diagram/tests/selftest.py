@@ -155,8 +155,18 @@ def tall_figure_measures_what_the_magazine_prints():
             assert rep["label_pt_at_target"] < 7.0 and "illegible" in out and "placed as" in out, out
 
 
+def audit_keeps_no_copy_of_the_magazine_page():
+    """The magazine's page lives in the builder; a second copy here once measured a tall figure at
+    12pt while the edition printed it at 4.2pt. The magazine target has no width of its own."""
+    src = AUDIT.read_text(encoding="utf-8")
+    for tell in ("geometry.json", "pageIn", "marginIn"):
+        assert tell not in src, f"audit.py reads the magazine's page again ({tell})"
+    assert _load_audit().TARGETS["magazine"] is None
+
+
 CHECKS = [
     ("every fence shape gets the shared answer (fences.json, tests/fences)", fences_match_the_shared_answer),
+    ("audit.py keeps no copy of the magazine page; the builder places every figure", audit_keeps_no_copy_of_the_magazine_page),
     ("a tall figure measures at the size the magazine prints it, not its width-only size", tall_figure_measures_what_the_magazine_prints),
     ("one presence rule with the edit gate: every shared case gets the same verdict", presence_matches_the_shared_cases),
     ("--target magazine measures with the magazine's own mermaid config", magazine_target_renders_as_the_magazine_does),

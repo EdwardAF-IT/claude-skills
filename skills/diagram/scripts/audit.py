@@ -63,34 +63,31 @@ def _sibling(path: Path):
 HERE = Path(__file__).resolve().parent
 fences = _sibling(HERE / "fences.py")        # what a diagram fence is: shared with edit, publish, magazine
 presence = _sibling(HERE / "presence.py")    # when a shortened identifier is still present: shared with edit
-# The magazine target is measured the way the magazine prints: its page geometry and its mermaid
-# config both come from the magazine skill, installed beside this one.
+# The magazine target is measured the way the magazine prints: the builder, installed beside this
+# skill, supplies its mermaid config and places every figure (magazine_placement). This file keeps
+# no copy of the magazine's page; one once disagreed with the builder by a factor of three.
 MAGAZINE_DIR = HERE.parents[1] / "magazine"
-MAGAZINE_GEOMETRY = MAGAZINE_DIR / "assets" / "geometry.json"
 MAGAZINE_BUILD = MAGAZINE_DIR / "scripts" / "build-magazine.mjs"
-
-
-def _magazine_measure_in() -> float | None:
-    """The full measure of a portrait magazine page, from the magazine's own geometry; None when
-    the magazine skill is not installed (the magazine target then refuses to run)."""
-    try:
-        g = json.loads(MAGAZINE_GEOMETRY.read_text(encoding="utf-8"))
-        p = g["portrait"]
-        return p["pageIn"]["width"] - 2 * p["marginIn"]["side"]
-    except (OSError, KeyError, ValueError):
-        return None
 
 
 # Target widths in inches. These are not measurements of any surface: 6.5in is the floor Edward
 # chose (2026-09-19) as the strictest realistic width — a wiki column, a printed page inside its
 # margins, a narrow browser window. A diagram legible at 6.5in is legible everywhere it will be
 # read, which is the skill's own rule of authoring to the strictest target. The question of
-# widening it is closed. The magazine plate is wider because that surface is known and fixed.
+# widening it is closed. The magazine has no width here: the builder places each figure on the
+# page, fit to its height as well as its width, and says at what scale.
 TARGETS = {
     "md": 6.5,         # the chosen floor; a README is not assumed wider than a wiki page
     "ado": 6.5,        # the chosen floor, not an observed ADO column width
-    "magazine": _magazine_measure_in(),   # a full-measure plate in the printed edition
+    "magazine": None,  # placed by the magazine builder, never a fixed width
 }
+
+
+def _surface(target: str, rep: "DiagramReport | None" = None) -> str:
+    """Where a figure prints, as a finding says it: a width, or the magazine's own placement."""
+    if target != "magazine":
+        return f"at {TARGETS[target]}in wide"
+    return f"placed as the magazine's '{rep.placement}'" if rep and rep.placement else "in the magazine"
 LABEL_FLOOR_PT = 7.0       # below this, a printed label is not read, it is guessed at
 LABEL_TARGET_PT = 8.0      # what to aim for, so the floor is not the design
 MAX_LABEL_WORDS = 3        # Edward's rule: three words, one preferred
@@ -875,7 +872,7 @@ def svg_texts(svg: str, kind: str) -> list[TextRun]:
     return runs
 
 
-def measure_svg(svg_path: Path, kind: str, target_in: float) -> tuple[float, float, list[TextRun], list[str]]:
+def measure_svg(svg_path: Path, kind: str) -> tuple[float, float, list[TextRun], list[str]]:
     svg = svg_path.read_text(encoding="utf-8", errors="replace")
     w = h = 0.0
     m = re.search(r'viewBox="[\d.\-]+ [\d.\-]+ ([\d.]+) ([\d.]+)"', svg)
@@ -1096,12 +1093,8 @@ def _check_measure_status(rep: DiagramReport) -> bool:
 def _check_legibility(rep: DiagramReport, target: str) -> None:
     """Legibility, the thing that costs him manual labour."""
     if rep.label_pt_at_target < LABEL_FLOOR_PT:
-        # The magazine names the placement it chose: a tall figure is shrunk by the page height,
-        # not the width, and the cure (split it) differs from shortening labels.
-        where = (f"placed as the magazine's '{rep.placement}'" if rep.placement
-                 else f"at {TARGETS[target]}in wide")
         rep.add("blocker", "illegible",
-                f"labels print at {rep.label_pt_at_target:.1f}pt {where}; floor is {LABEL_FLOOR_PT}pt")
+                f"labels print at {rep.label_pt_at_target:.1f}pt {_surface(target, rep)}; floor is {LABEL_FLOOR_PT}pt")
     elif rep.label_pt_at_target < LABEL_TARGET_PT:
         rep.add("warning", "tight",
                 f"labels print at {rep.label_pt_at_target:.1f}pt; target is {LABEL_TARGET_PT}pt")
@@ -1111,7 +1104,7 @@ def _check_structural_floor(rep: DiagramReport, target: str) -> None:
     """The real constraint, said up front: geometry no label can change."""
     if rep.structural_reason and rep.structural_pt < LABEL_FLOOR_PT:
         rep.add("blocker", "needs-author",
-                f"{rep.structural_reason} fix a minimum width before any label is written: at {TARGETS[target]}in "
+                f"{rep.structural_reason} fix a minimum width before any label is written: {_surface(target, rep)}, "
                 f"the best possible label is {rep.structural_pt:.1f}pt, under the {LABEL_FLOOR_PT}pt floor; "
                 f"shortening labels cannot help — split by a boundary a reader would recognise")
     elif rep.parsed and rep.nodes > NODE_BUDGET and rep.label_pt_at_target < LABEL_FLOOR_PT:
@@ -1124,11 +1117,11 @@ def _check_height(rep: DiagramReport, target: str) -> None:
     """Height: five screens of diagram is not read either."""
     if rep.height_at_target_px > 3 * PAGE_HEIGHT_PX:
         rep.add("blocker", "tall",
-                f"{rep.height_at_target_px:.0f}px tall at {TARGETS[target]}in wide, {rep.height_at_target_px / PAGE_HEIGHT_PX:.1f} "
+                f"{rep.height_at_target_px:.0f}px tall {_surface(target, rep)}, {rep.height_at_target_px / PAGE_HEIGHT_PX:.1f} "
                 f"pages of {PAGE_HEIGHT_PX}px; nobody scrolls a figure — split it")
     elif rep.height_at_target_px > 1.5 * PAGE_HEIGHT_PX:
         rep.add("warning", "tall",
-                f"{rep.height_at_target_px:.0f}px tall at {TARGETS[target]}in wide, {rep.height_at_target_px / PAGE_HEIGHT_PX:.1f} "
+                f"{rep.height_at_target_px:.0f}px tall {_surface(target, rep)}, {rep.height_at_target_px / PAGE_HEIGHT_PX:.1f} "
                 f"pages of {PAGE_HEIGHT_PX}px; a reader sees it in pieces")
 
 
@@ -1269,8 +1262,8 @@ def analyse(path: Path, target: str, workdir: Path, kind: str | None = None) -> 
     reports: list[DiagramReport] = []
     config_file, config, config_error = None, {}, ""
     if target == "magazine":
-        if TARGETS["magazine"] is None:
-            raise SystemExit(f"audit.py: the magazine target needs the magazine skill beside this one ({MAGAZINE_GEOMETRY} is missing)")
+        if not MAGAZINE_BUILD.exists():
+            raise SystemExit(f"audit.py: the magazine target needs the magazine skill beside this one ({MAGAZINE_BUILD} is missing)")
         config_file, config, config_error = magazine_mermaid_config(workdir)
     actor_w, actor_gap, font_px = _sequence_geometry(config)
     for index, src, fenced in extract_diagrams(path):
@@ -1302,11 +1295,14 @@ def analyse(path: Path, target: str, workdir: Path, kind: str | None = None) -> 
         edge_texts = [l for _, _, l in g.edges if l] if g.parsed else []
 
         # geometry the labels cannot change: n sequence participants are n fixed boxes and gaps
+        min_w, structural_reason = 0, ""
         if g.parsed and rep.kind == "sequence" and len(g.nodes) >= 2 and not re.search(r"actorMargin|\"width\"|'width'|\bwrap\b", src):
             n = len(g.nodes)
             min_w = round(n * actor_w + (n - 1) * actor_gap + SEQ_MARGIN)
-            rep.structural_pt = font_px * 0.75 * min(1.0, (TARGETS[target] * 96.0) / min_w)
-            rep.structural_reason = f"{n} participants ({actor_w:g}px boxes, {actor_gap:g}px gaps: {min_w}px)"
+            structural_reason = f"{n} participants ({actor_w:g}px boxes, {actor_gap:g}px gaps: {min_w}px)"
+            if target != "magazine":
+                rep.structural_pt = font_px * 0.75 * min(1.0, (TARGETS[target] * 96.0) / min_w)
+                rep.structural_reason = structural_reason
 
         stem = f"{path.stem}-{index}"[:60].replace(" ", "_")
         if config_error and rep.kind != "graphviz":
@@ -1315,18 +1311,28 @@ def analyse(path: Path, target: str, workdir: Path, kind: str | None = None) -> 
             svg, err = render_svg(src, rep.kind, workdir, stem, config_file)
         if svg:
             rep.rendered = True
-            rep.native_w, rep.native_h, runs, rep.layout_defects = measure_svg(svg, rep.kind, TARGETS[target])
+            rep.native_w, rep.native_h, runs, rep.layout_defects = measure_svg(svg, rep.kind)
             rep.text_runs = len(runs)
-            scale = min(1.0, (TARGETS[target] * 96.0) / rep.native_w) if rep.native_w else 1.0
-            if target == "magazine" and rep.native_w and rep.native_h:
+            if target != "magazine":
+                scale = min(1.0, (TARGETS[target] * 96.0) / rep.native_w) if rep.native_w else 1.0
+            else:
                 # The magazine fits a plate to the page height as well as the width, and picks
                 # among column, tall, turned and landscape placements: its scale is what prints.
-                placement, place_error = magazine_placement(rep.native_w, rep.native_h, kind)
-                if placement:
-                    scale = placement["scale"]
-                    rep.placement = placement["cls"]
-                else:
-                    rep.measure_error = place_error   # fail closed, like the config above
+                scale = 1.0
+                if rep.native_w and rep.native_h:
+                    placement, place_error = magazine_placement(rep.native_w, rep.native_h, kind)
+                    if placement:
+                        scale = placement["scale"]
+                        rep.placement = placement["cls"]
+                    else:
+                        rep.measure_error = place_error   # fail closed, like the config above
+                if min_w and rep.native_h:
+                    # The best case: every message shortened until the participants alone set
+                    # the width, placed as the builder would place that narrower figure.
+                    best, _ = magazine_placement(min_w, rep.native_h, kind)
+                    if best:
+                        rep.structural_pt = font_px * 0.75 * best["scale"]
+                        rep.structural_reason = structural_reason
             rep.height_at_target_px = rep.native_h * scale
             label_runs = [r for r in runs if r.role in ("node", "edge", "member")]
             # fail closed: no width, or text the tool cannot place in a role, is not a pass
@@ -1420,7 +1426,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
             by_code[f.code] = by_code.get(f.code, 0) + 1
 
     legible = [r for r in all_reports if r.rendered and r.label_pt_at_target]
-    print(f"\n=== {total} diagrams in {len(files)} files, target {args.target} ({TARGETS[args.target]}in) ===")
+    print(f"\n=== {total} diagrams in {len(files)} files, target {args.target} ({_surface(args.target)}) ===")
     print(f"  worst finding : {by_worst}")
     print(f"  by type       : {dict(sorted(by_kind.items(), key=lambda kv: -kv[1]))}")
     print(f"  rendered      : {sum(1 for r in all_reports if r.rendered)}/{total}   "
