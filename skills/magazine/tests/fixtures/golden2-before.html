@@ -28,7 +28,8 @@
  * (mermaid-theme.json names them as var(--name)), so a color changed here, or by --accent,
  * changes the diagrams with the page. */
 :root {
-  --ink:        #1b2430;
+  --ink:        #1b2430;   /* display type, rules and the diagrams */
+  --text:       #000000;   /* reading text: true black, the easiest to read on paper */
   --ink-soft:   #5b6672;
   --ink-faint:  #8b95a3;   /* a line that recedes: a sequence diagram's lifelines */
   --paper:      #ffffff;
@@ -73,7 +74,7 @@ body {
   font-family: var(--body-font);
   font-size: var(--body-size);
   line-height: var(--body-leading);
-  color: var(--ink);
+  color: var(--text);
   font-kerning: normal;
   text-rendering: optimizeLegibility;
 }
@@ -232,7 +233,7 @@ h3.question::before { display: none; }
 p.lead .runin-label { font-family: var(--sans); font-weight: 700; font-size: 9.5pt; }
 
 p { margin: 0 0 calc(var(--u) * 0.5); orphans: 3; widows: 3; text-wrap: pretty; }
-a { color: var(--ink); text-decoration: none; }
+a { color: inherit; text-decoration: none; }
 strong { font-weight: 700; }
 
 ul, ol { margin: 0 0 var(--u); padding-left: 1.4em; }
@@ -282,7 +283,7 @@ th, td { overflow-wrap: break-word; word-break: normal; hyphens: none; }
 blockquote {
   break-inside: avoid; margin: var(--u) 0; padding: 10pt 14pt;
   background: var(--accent-bg); border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0;
-  color: var(--ink); font-style: italic;
+  color: var(--text); font-style: italic;
 }
 blockquote > :last-child { margin-bottom: 0; }
 /* A long quotation is read, not glanced at: roman, not italic. */
@@ -320,7 +321,7 @@ blockquote code { font-style: normal; }
 /* ===== Code ===== */
 /* In running prose an identifier is distinguished by its face alone: no box. Inside a table, a
  * card or a definition list a box helps a cell scan, so the tint stays there. */
-code { font-family: var(--mono); font-size: 0.85em; color: var(--ink); background: none; padding: 0; border-radius: 0; }
+code { font-family: var(--mono); font-size: 0.85em; color: var(--text); background: none; padding: 0; border-radius: 0; }
 td code, .card code, .deflist code, .fields code { background: var(--tint); padding: 0.05em 0.3em; border-radius: 2px; }
 pre {
   background: var(--tint); border: 1px solid var(--line-soft); border-radius: 3px;
@@ -550,7 +551,7 @@ td .pill { font-size: 7pt; line-height: 10pt; padding: 0 6px; }
   .rung.long .fields > div { break-inside: avoid; }
   blockquote, .callout { orphans: 2; widows: 2; }
 
-  a { color: var(--ink); text-decoration: none; }
+  a { color: inherit; text-decoration: none; }
 
   /* The folio: the title and the page number on one line at the foot; the head stays empty.
    * Margin boxes cannot see custom properties, so the fonts and colours are literal, and the

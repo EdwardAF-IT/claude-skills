@@ -208,9 +208,11 @@ The shape those share, and that a new one should keep:
 
 - **Everything inline** — the whole stylesheet in one `<style>` in `<head>`, diagrams as inline SVG.
   One file he can move, mail or archive.
-- **A named palette on `:root`** — `--ink`, `--ink-soft`, `--paper`, `--line`, plus semantic pairs
-  each with a tint (`--blue`/`--blue-bg`, `--green`/`--green-bg`, `--amber`, `--red`, `--violet`).
-  Colour is assigned meaning, then used consistently.
+- **A named palette on `:root`** — `--text`, `--ink`, `--ink-soft`, `--paper`, `--line`, plus
+  semantic pairs each with a tint (`--blue`/`--blue-bg`, `--green`/`--green-bg`, `--amber`, `--red`,
+  `--violet`). Color is assigned meaning, then used consistently. **Reading text is true black**
+  (`--text`, Edward's rule: the easiest to read on paper); `--ink` is for display type, rules and
+  the diagrams.
 - **A font trio as variables** — `--serif: Georgia, "Palatino Linotype", serif`, `--sans: "Segoe UI",
   "Trebuchet MS", Arial`, `--mono: Consolas, Menlo, monospace`.
 - **One spacing unit** — the body leading — and every vertical space a multiple of it.

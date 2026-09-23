@@ -45,3 +45,10 @@ test('a stylesheet missing a color the plates use fails loudly, never draws unde
   const palette = paletteOf(':root { --ink: #000000; }');
   assert.throws(() => mermaidConfig(palette), /--accent-bg/);
 });
+
+test('reading text is true black; display type keeps the ink', () => {
+  assert.equal(paletteOf(css).text, '#000000');
+  assert.match(css, /\nbody \{[^}]*\bcolor: var\(--text\);/);
+  assert.match(css, /\na \{ color: inherit;/);
+  assert.notEqual(paletteOf(css).ink, '#000000');
+});
