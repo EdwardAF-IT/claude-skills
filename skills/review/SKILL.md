@@ -204,7 +204,9 @@ design — nothing detected the drift or said so in the output.
 6. **After the last persona**, run the consolidation pass: verify, dedup, rank, and write
    `<date>/findings.md` at the resolved location.
 7. **End the round in chat, not in a file.** Print the foundational shortlist — one line per
-   finding: what, `file:line`, smallest fix — then the counts (other findings, dropped in
+   finding, severity and effort first:
+   `[blocker · S/L] what — file:line — smallest: … · best: …` (effort as smallest/best; a single
+   size and "best: same" when they coincide) — then the counts (other findings, dropped in
    verification), then a clickable link to `findings.md`. He should never have to go looking for
    what the board found; the file is the full record, the chat is the answer.
 
@@ -217,6 +219,11 @@ Each finding carries:
 - **Why it costs him** — in terms of maintaining this code later, not abstract principle
 - **Evidence** — the census table, the call graph result, the measured rate, the failing input
 - **Smallest fix** — the least change that removes the problem, not a redesign
+- **Best fix** — what he would do with the time to do it right, which may be a redesign. If the
+  smallest fix is already the best one, say "same" rather than inventing a bigger option
+- **Effort** — a t-shirt size for each fix: **S** under an hour, one file; **M** a few hours,
+  a handful of files; **L** a day or two, crosses a boundary or needs new tests; **XL** more than
+  that, or needs a design decision first
 - **Foundational or local** — foundational means other work depends on it being right, or it will
   get more expensive to fix the longer it waits. This is Edward's triage axis; he fixes foundational
   now and defers the rest
@@ -238,7 +245,7 @@ duplicated"* is not a finding. Two similar implementations are a watch item; thr
 
 - **Dedup across personas.** Four reviewers will find the same god class. Emit one finding with the
   corroborating views named — agreement is signal, repetition is noise.
-- **Rank foundational first**, then by severity, then by cost to fix.
+- **Rank foundational first**, then by severity, then by the smallest fix's effort (S before XL).
 - **Cap the headline list.** If a round produces eighty findings, lead with the foundational ones
   and put the rest behind a count. His review of 2026-09-04 produced 57 rows and he remediated only
   the foundational ones; give him that shortlist directly, in chat (step 7).
