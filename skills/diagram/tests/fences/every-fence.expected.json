@@ -1,0 +1,18 @@
+{
+  "_comment": "The answer every tool must give on every-fence.md: each fence's opening and closing line (1-based; close null when it runs to the end), its language as written, and the engine when it holds a diagram. The ::: note admonition is prose and is not listed. Checked by the self-tests of diagram, edit and publish and by magazine's node tests.",
+  "fences": [
+    { "open": 5,  "close": 8,    "lang": "mermaid",  "engine": "mermaid" },
+    { "open": 12, "close": 15,   "lang": "mermaid",  "engine": "mermaid" },
+    { "open": 19, "close": 22,   "lang": "mermaid",  "engine": "mermaid" },
+    { "open": 24, "close": 27,   "lang": "mermaid",  "engine": "mermaid" },
+    { "open": 31, "close": 33,   "lang": "dot",      "engine": "graphviz" },
+    { "open": 35, "close": 37,   "lang": "graphviz", "engine": "graphviz" },
+    { "open": 41, "close": 44,   "lang": "Mermaid",  "engine": "mermaid" },
+    { "open": 46, "close": 49,   "lang": "mermaid",  "engine": "mermaid" },
+    { "open": 53, "close": 55,   "lang": "python",   "engine": null },
+    { "open": 57, "close": 59,   "lang": "",         "engine": null },
+    { "open": 63, "close": 68,   "lang": "markdown", "engine": null },
+    { "open": 77, "close": 80,   "lang": "mermaid",  "engine": "mermaid" },
+    { "open": 84, "close": null, "lang": "mermaid",  "engine": "mermaid" }
+  ]
+}

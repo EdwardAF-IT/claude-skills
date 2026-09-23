@@ -99,11 +99,11 @@ the repeat goes — after the gate confirms every fact it carried is still there
 
 ## The two readers
 
-The judgement lives in Personetta (`~/.personetta/claude-recipes/`):
-
-- **`edit-copyedit`** — the author. *"Tighten for clarity and concision, fix grammar and
-  consistency, vary rhythm, and enforce a style guide — without changing the author's meaning or
-  voice or inventing new claims."*
+- **The author** — tighten for clarity and concision, fix grammar and consistency, vary rhythm,
+  and enforce a style guide, without changing the author's meaning or voice or inventing new
+  claims. Where Personetta (`~/.personetta/claude-recipes/`) is installed, its `edit-copyedit`
+  recipe carries this judgement; where it is not, apply the same rule directly — it does not
+  need the recipe to hold.
 - **The cold reader** — the adversary, dispatched as a separate agent with no memory of the
   edit. It reads the before and the after and lists every claim, qualifier, example or caveat
   in the before it cannot find in the after; and separately, every place the after made it

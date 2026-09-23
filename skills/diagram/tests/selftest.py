@@ -1,10 +1,10 @@
 """Gate self-test: every check the tool makes has a case that must fail and one that must pass.
 Run from anywhere; exit 1 if any expectation is missed."""
-import subprocess, sys, re
+import importlib.util, json, subprocess, sys, re, tempfile
 from pathlib import Path
 
 HERE = Path(__file__).parent
-AUDIT = Path.home() / ".claude/skills/diagram/scripts/audit.py"
+AUDIT = HERE.parent / "scripts" / "audit.py"
 
 
 def run(*args):
@@ -16,23 +16,58 @@ def run(*args):
 CASES = [
     # name, args, expected exit, must-appear regexes, must-not-appear regexes
     ("edge with labelled source is seen", ["graph", "edges.mmd"], 0, [r'"from": "A",\s*"to": "B"', r'"endpoint"', r'"classifier"'], []),
-    ("deleted arrow is CHANGED", ["diff", "edges.mmd", "edges-arrow-deleted.mmd"], 1, [r"relationships removed\s*: \[\('A', 'B', 0\)\]"], []),
+    ("deleted arrow is CHANGED", ["diff", "edges.mmd", "edges-arrow-deleted.mmd"], 1, [r"relationships removed\s*: \[\('A', 'B', 0\)\]"], [r"VERDICT: IDENTICAL", r"entities removed\s*:\s*\["]),
     ("same file is IDENTICAL", ["diff", "edges.mmd", "edges-same.mmd"], 0, [r"before: 20 entities, 15 relationships", r"IDENTICAL"], []),
     ("unmeasurable render refuses", ["check", "xychart.mmd"], 2, [r"\[blocker\] unmeasured"], [r"\[blocker\] illegible"]),
     ("pie slices are entities and its legend is measured", ["check", "pie.mmd"], 0, [r"nodes=2 edges=0", r"pt@target=12\.0"], [r"unparsed", r"unmeasured"]),
     ("changed pie value is DESTROYED", ["diff", "pie.mmd", "pie-value-changed.mmd"], 2, [r"DESTROYED .40."], [r"IDENTICAL"]),
     ("deleted pie slice is CHANGED", ["diff", "pie.mmd", "pie-slice-deleted.mmd"], 1, [r"entities removed\s*: \['beta'\]"], [r"UNVERIFIABLE"]),
-    ("unterminated init refuses", ["check", "init-unterminated.mmd"], 2, [r"init-unterminated"], []),
-    ("seven participants: needs-author up front", ["check", "seq7.mmd"], 2, [r"needs-author: 7 participants"], []),
+    ("unterminated init refuses", ["check", "init-unterminated.mmd"], 2, [r"init-unterminated"], [r"illegible", r"unmeasured"]),
+    ("seven participants: needs-author up front", ["check", "seq7.mmd"], 2, [r"needs-author: 7 participants"], [r"no-render", r"unmeasured"]),
     ("message spanning a lifeline is struck through", ["check", "seq-struck.mmd"], 1, [r"\[warning\] spanning-struck: message \"Forward the validated"], [r"\[blocker\]"]),
     ("rightward spanning message pairs with its own arrow, never graded struck-through",
      ["check", "seq-rightward.mmd"], 2, [r"spanning-struck: message \"release lease, reap the mirror results\" spans 3 gaps"], [r"struck-through"]),
-    ("graphviz fixed-size overflow", ["check", "gv-overflow.gv"], 2, [r"overflow: label"], []),
-    ("forty steps is tall", ["check", "tall.mmd"], 2, [r"\] tall:"], []),
+    ("graphviz fixed-size overflow", ["check", "gv-overflow.gv"], 2, [r"overflow: label"], [r"no-render", r"unmeasured"]),
+    ("forty steps is tall", ["check", "tall.mmd"], 2, [r"\] tall:"], [r"illegible"]),
     ("note over twenty words", ["check", "long-note.mmd"], 1, [r"long-note"], [r"\[blocker\]"]),
     ("no false DESTROYED on paths, aliases, e.g., samples, ellipsis, dotted, bare value",
      ["diff", "fp-before.md", "fp-after.md"], 0, [r"VERDICT: IDENTICAL", r"relocated '/api/v2/workorders/123'", r"relocated '1985'", r"sample value '12345'"], [r"DESTROYED"]),
-    ("a real deletion still fails", ["diff", "fp-before.md", "fp-after-204-deleted.md"], 2, [r"DESTROYED '204'"], []),
+    ("a real deletion still fails", ["diff", "fp-before.md", "fp-after-204-deleted.md"], 2, [r"DESTROYED '204'"], [r"sample value '204'"]),
+    ("declare accepts a node moved whole into a matching table row",
+     ["diff", "declare-before.md", "declare-after-right.md", "--declare", "moved to table"], 0,
+     [r"VERDICT: RESTRUCTURED"], [r"DESTROYED"]),
+    ("declare refuses a table row with the right code but the wrong name",
+     ["diff", "declare-before.md", "declare-after-wrong.md", "--declare", "moved to table"], 2,
+     [r"DESTROYED 'B'"], [r"RESTRUCTURED"]),
+    ("class member drop is CHANGED", ["diff", "class-before.mmd", "class-after-member-deleted.mmd"], 1,
+     [r"members changed on 'Foo': -\['bar'\] \+\[\]"], [r"IDENTICAL"]),
+    ("ER relationship drop is CHANGED", ["diff", "er-before.mmd", "er-after-rel-deleted.mmd"], 1,
+     [r"relationships removed\s*: \[\('CUSTOMER', 'ORDER', 0\)\]"], [r"IDENTICAL"]),
+    ("state transition drop is CHANGED", ["diff", "state-before.mmd", "state-after-transition-deleted.mmd"], 1,
+     [r"entities removed\s*: \['Running'\]"], [r"IDENTICAL"]),
+    ("gantt task drop is CHANGED", ["diff", "gantt-before.mmd", "gantt-after-task-deleted.mmd"], 1,
+     [r"entities removed\s*: \['a1'\]"], [r"IDENTICAL"]),
+    ("mindmap leaf drop is CHANGED", ["diff", "mindmap-before.mmd", "mindmap-after-leaf-deleted.mmd"], 1,
+     [r"entities removed\s*: \['idea two'\]"], [r"IDENTICAL"]),
+    ("an unparsed kind (journey) abstains as UNVERIFIABLE, exit 3",
+     ["diff", "journey-before.mmd", "journey-after.mmd"], 3, [r"VERDICT: UNVERIFIABLE"], [r"IDENTICAL", r"CHANGED"]),
+    ("a split into two afters is IDENTICAL to the one before",
+     ["diff", "split-before.mmd", "split-after-1.mmd", "split-after-2.mmd"], 0,
+     [r"VERDICT: IDENTICAL", r"before: 3 entities, 2 relationships"], [r"CHANGED", r"DESTROYED"]),
+    ("without --context a relocated detail off-page is DESTROYED",
+     ["diff", "context-before.mmd", "context-after.mmd"], 2, [r"DESTROYED '404'"], [r"IDENTICAL"]),
+    ("--context finds the relocated detail in the named page",
+     ["diff", "context-before.mmd", "context-after.mmd", "--context", "context-legend.md"], 0,
+     [r"relocated '404'.*context-legend\.md"], [r"DESTROYED"]),
+    ("the audit command walks a path and reports a summary",
+     ["audit", "edges.mmd", "--target", "md"], 0,
+     [r"1 diagrams in 1 files, target md", r"by type\s*: \{'flowchart': 1\}"], []),
+    ("a ~~~ mermaid fence in a document is seen and gated",
+     ["check", "tilde-fence.md"], 0, [r"tilde-fence\.md#0\s+flowchart"], []),
+    ("a ```dot fence in a document is seen and measured",
+     ["check", "redraw-dot.md"], 0, [r"redraw-dot\.md#0\s+graphviz/.*pt@target=\d"], [r"unmeasured"]),
+    ("a mermaid redraw escalated to Graphviz, same graph, is IDENTICAL",
+     ["diff", "redraw-mermaid.md", "redraw-dot.md"], 0, [r"\(graphviz, parsed\)", r"VERDICT: IDENTICAL"], [r"UNVERIFIABLE"]),
 ]
 
 bad = 0
@@ -46,5 +81,74 @@ for name, args, want_exit, must, must_not in CASES:
         print(f"      missing: {m}")
     if not ok:
         print("      " + "\n      ".join(out.strip().splitlines()[-12:]))
-print(f"{len(CASES) - bad}/{len(CASES)} gate tests pass")
+
+
+# In-process checks on the rules this skill shares with edit, publish and magazine.
+def _load_audit():
+    spec = importlib.util.spec_from_file_location("_selftest_audit", AUDIT)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+audit = _load_audit()
+FENCES = HERE / "fences"
+BUILDER = HERE.parents[1] / "magazine" / "scripts" / "build-magazine.mjs"
+
+
+def fences_match_the_shared_answer():
+    doc = FENCES / "every-fence.md"
+    text = doc.read_text(encoding="utf-8")
+    lines = audit.fences.split_lines(text)
+    want = json.loads((FENCES / "every-fence.expected.json").read_text(encoding="utf-8"))["fences"]
+    got = [{"open": f.start + 1, "close": f.end + 1 if f.end < len(lines) else None, "lang": f.lang, "engine": f.engine}
+           for f in audit.fences.scan(text)]
+    assert got == want, got
+    # and the diagram gate takes exactly the diagram fences from it, in order
+    diagrams = [f for f in want if f["engine"]]
+    extracted = audit.extract_diagrams(doc)
+    assert len(extracted) == len(diagrams), len(extracted)
+    for (_, src, _), f in zip(extracted, diagrams):
+        assert src.splitlines()[0].strip() == lines[f["open"]].strip(), (src, f)
+
+
+def presence_matches_the_shared_cases():
+    cases = json.loads((HERE / "presence-cases.json").read_text(encoding="utf-8"))["cases"]
+    for c in cases:
+        t = c["after"]
+        assert audit.token_present(c["fact"], audit._tokens(t), t) == c["kept"], c
+
+
+def magazine_target_renders_as_the_magazine_does():
+    """The same figure, measured by the gate for the magazine and placed by the builder, has one
+    native size: both render with the magazine's own mermaid config."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        run("check", "edges.mmd", "--target", "magazine", "--json", str(tmp / "r.json"))
+        rep = json.loads((tmp / "r.json").read_text(encoding="utf-8"))[0]
+        doc = tmp / "edges.md"
+        doc.write_text("# T\n\n```mermaid\n" + (HERE / "edges.mmd").read_text(encoding="utf-8") + "\n```\n", encoding="utf-8")
+        r = subprocess.run(["node", str(BUILDER), "--out", str(tmp / "e.html"), "--kind", "brief", str(doc)],
+                           capture_output=True, text=True, encoding="utf-8", timeout=300)
+        m = re.search(r"native (\d+)x(\d+)", r.stdout)
+        assert m, r.stdout + r.stderr
+        got = (round(rep["native_w"]), round(rep["native_h"]))
+        assert got == (int(m.group(1)), int(m.group(2))), (got, m.group(0))
+
+
+CHECKS = [
+    ("every fence shape gets the shared answer (fences.json, tests/fences)", fences_match_the_shared_answer),
+    ("one presence rule with the edit gate: every shared case gets the same verdict", presence_matches_the_shared_cases),
+    ("--target magazine measures with the magazine's own mermaid config", magazine_target_renders_as_the_magazine_does),
+]
+for name, fn in CHECKS:
+    try:
+        fn()
+        print(f"PASS  {name}")
+    except Exception as exc:  # an assertion or a crash is a miss either way
+        bad += 1
+        print(f"FAIL  {name}\n      {type(exc).__name__}: {str(exc)[:400]}")
+total = len(CASES) + len(CHECKS)
+print(f"{total - bad}/{total} gate tests pass")
 sys.exit(1 if bad else 0)

@@ -1,6 +1,6 @@
 # Claude Code skills
 
-Custom skills for [Claude Code](https://claude.com/claude-code): handoff and resume between
+Custom skills for [Claude Code](https://claude.com/claude-code): handoff and pickup between
 sessions, checkpoints, a design pass, a review board, and a document pipeline (diagram → edit →
 magazine → publish) that turns a markdown design into a printable edition.
 
@@ -25,5 +25,5 @@ Nothing else under `~/.claude` is touched. First time: open a new window, run `c
 ## Use
 
 Inside Claude Code, type the skill's name or say what you want: `handoff kitchen-remodel`,
-`resume kitchen-remodel`, `checkpoint`, `magazine`, `diagram`, `publish this`. Each skill's
+`pickup kitchen-remodel`, `checkpoint`, `magazine`, `diagram`, `publish this`. Each skill's
 `SKILL.md` says when it applies.

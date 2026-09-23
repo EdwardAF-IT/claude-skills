@@ -17,14 +17,14 @@ system at all still has parked notes and this session's own open questions.
 Walk this ladder, skipping what does not apply. Steps 1–2 always work; 3 is best-effort.
 
 1. **This session** — anything you are waiting on, plus decisions you deferred rather than made.
-2. **Parked notes in this repo** — open questions in today's `.claude/checkpoints/<date>.md` and
-   any recent `docs/handoffs/*.md` or `.claude/handoffs/*.md` not yet struck through.
+2. **Parked notes in this repo** — open questions in the most recent notes
+   `python ~/.claude/skills/pickup/scripts/latest.py` finds (checkpoints and handoffs), not yet
+   struck through.
 3. **The repo's task system**, if it has one — detect, do not assume:
    - The repo's `CLAUDE.md` has a `## Status sources` section → **use the commands it names**.
      This is the intended way to teach a repo's specifics once; prefer it over guessing.
    - `maestro` on PATH and this checkout is a registered consumer →
      `maestro decisions list -c <consumer>`, unresolved only (`decisions show <id>` for detail).
-     From `C:\Code\maestro` the consumer is `dogfood-gh`.
    - A GitHub remote → `gh issue list --search "..."` for items labelled/assigned as needing a
      decision, and PRs with review requested.
    - An Azure DevOps remote → the repo's own CLI or `az boards` if configured.
@@ -56,7 +56,8 @@ where it came from:
 | `maestro` ac-ruling | `maestro decisions rule`, then `apply-ac-ruling` |
 | `maestro` ac-draft | `decisions approve` / `reject`, then `apply-ac-draft` |
 | `maestro` grooming-draft | `decisions approve-grooming` / `reject-grooming` |
-| no longer wanted | `maestro decisions abandon` — recorded, never silent |
+| another task system (step 3) | its own resolve/answer verb — the command its `CLAUDE.md` or CLI names |
+| no longer wanted | `maestro decisions abandon`, or that system's own "won't do" verb — recorded, never silent |
 | anything else | whatever that system's own write path is — never edit its store by hand |
 
 Confirm each in **one line** (`#1337 ruled pass — applied`), then go straight to the next question.
@@ -74,4 +75,4 @@ He can stop at any point ("that's enough", "later"). When he does, or when the q
 - One question per call, always. This skill exists because batching is what he does not want.
 - Never re-ask something already answered this session or already recorded as a decision.
 - Never use this during unattended work — it is the opposite of the night rule.
-- Brevity applies here as in [[sitrep]]: he asks for detail when he wants it.
+- Brevity applies here as everywhere: he asks for detail when he wants it.

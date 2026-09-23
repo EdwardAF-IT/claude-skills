@@ -23,19 +23,36 @@
 
 .PARAMETER Stage
   Where to keep the skills checkout. Defaults to %LOCALAPPDATA%\claude-skills.
+
+.PARAMETER ToolsPath
+  A folder placed first on PATH before winget/npm/git/robocopy are looked up. Lets a test run
+  point the installer at stub tools instead of the real machine; production runs leave it unset.
 #>
 [CmdletBinding()]
 param(
     [string] $Repo = 'EdwardAF-IT/claude-skills',
     [switch] $SkipTools,
     [string] $ClaudeHome = (Join-Path $HOME '.claude'),
-    [string] $Stage = (Join-Path $env:LOCALAPPDATA 'claude-skills')
+    [string] $Stage = (Join-Path $env:LOCALAPPDATA 'claude-skills'),
+    [string] $ToolsPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
+if ($ToolsPath) { $env:PATH = $ToolsPath.TrimEnd(';') + ';' + $env:PATH }
+
 function Say([string] $text) { Write-Host ('  ' + $text) }
-function Have([string] $name) { return $null -ne (Get-Command $name -ErrorAction SilentlyContinue) }
+
+function Have([string] $name)
+{
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($null -eq $cmd) { return $false }
+    # The Windows Store ships an App Execution Alias stub for `python`/`python3` that exists on
+    # PATH by default but only opens the Store when run. Treat it as not installed. Only those
+    # names: winget itself is a real alias in the same WindowsApps folder.
+    if (($name -in @('python', 'python3')) -and $cmd.Source -and ($cmd.Source -match '\\WindowsApps\\')) { return $false }
+    return $true
+}
 
 function Add-UserPath([string] $dir)
 {
@@ -45,6 +62,23 @@ function Add-UserPath([string] $dir)
         [Environment]::SetEnvironmentVariable('PATH', ($user.TrimEnd(';') + ';' + $dir).TrimStart(';'), 'User')
     }
     $env:PATH = $env:PATH + ';' + $dir
+}
+
+function Sync-MachinePath()
+{
+    # Pick up a fresh install from the machine and user PATH, without losing the test stub
+    # folder (if any) off the front of this session's PATH.
+    $env:PATH = [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('PATH', 'User')
+    if ($ToolsPath) { $env:PATH = $ToolsPath.TrimEnd(';') + ';' + $env:PATH }
+}
+
+function Invoke-Checked([string] $exe, [string[]] $cmdArgs, [string] $onFailMessage, [int] $failAt = 1)
+{
+    & $exe @cmdArgs | Out-Null
+    if ($LASTEXITCODE -ge $failAt)
+    {
+        throw ($onFailMessage + ' (' + $exe + ' exited with code ' + $LASTEXITCODE + ').')
+    }
 }
 
 function Ensure-Winget([string] $command, [string] $id, [string] $label, [string] $bin = '')
@@ -58,18 +92,22 @@ function Ensure-Winget([string] $command, [string] $id, [string] $label, [string
         return
     }
     Say ('installing ' + $label + ' ...')
-    winget install --id $id --exact --silent --accept-package-agreements --accept-source-agreements | Out-Null
-    # A fresh install is not on this shell's PATH yet; pick it up from the machine and user PATH.
-    $env:PATH = [Environment]::GetEnvironmentVariable('PATH', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('PATH', 'User')
+    Invoke-Checked 'winget' @('install', '--id', $id, '--exact', '--silent', '--accept-package-agreements', '--accept-source-agreements') `
+        ($label + ' could not be installed. Check your network connection and try running the installer again')
+    Sync-MachinePath
     if (-not (Have $command) -and $bin -and (Test-Path $bin)) { Add-UserPath $bin }
-    if (-not (Have $command)) { throw ($label + ' installed but ' + $command + ' is not on PATH; open a new window and run this again') }
+    if (-not (Have $command)) { throw ($label + ' installed but ' + $command + ' is not on PATH yet. Close this window, open a new one, and run the installer again') }
 }
 
 function Ensure-Npm([string] $command, [string] $package, [string] $label)
 {
     if (Have $command) { Say ($label + ' present'); return }
     Say ('installing ' + $label + ' ...')
-    npm install -g $package | Out-Null
+    # `npm` alone can resolve to npm.ps1, which PowerShell's default execution policy blocks.
+    # npm.cmd is always safe to run.
+    Invoke-Checked 'npm.cmd' @('install', '-g', $package) `
+        ($label + ' could not be installed. Check your network connection and try running the installer again')
+    if (-not (Have $command)) { throw ($label + ' installed but ' + $command + ' is not on PATH yet. Close this window, open a new one, and run the installer again') }
 }
 
 Write-Host ''
@@ -86,9 +124,14 @@ if (-not $SkipTools)
     Ensure-Npm    'claude' '@anthropic-ai/claude-code'  'Claude Code'
     Ensure-Npm    'mmdc'   '@mermaid-js/mermaid-cli'    'mermaid-cli'
     # highlight.js is a library, not a command; check the global tree for it.
-    $root = (npm root -g).Trim()
+    $root = (& npm.cmd root -g).Trim()
     if (Test-Path (Join-Path $root 'highlight.js')) { Say 'highlight.js present' }
-    else { Say 'installing highlight.js ...'; npm install -g highlight.js | Out-Null }
+    else
+    {
+        Say 'installing highlight.js ...'
+        Invoke-Checked 'npm.cmd' @('install', '-g', 'highlight.js') `
+            'highlight.js could not be installed. Check your network connection and try running the installer again'
+    }
 }
 
 # The skills repository lives in a staging folder; the skills are copied from there so
@@ -98,28 +141,76 @@ $url   = 'https://github.com/' + $Repo + '.git'
 if (Test-Path (Join-Path $stage '.git'))
 {
     Say 'updating skills ...'
-    git -C $stage pull --quiet --ff-only
+    Invoke-Checked 'git' @('-C', $stage, 'pull', '--quiet', '--ff-only') `
+        'Could not update the skills. Check your network connection and try running the installer again'
 }
 else
 {
     Say 'fetching skills ...'
-    git clone --quiet --depth 1 $url $stage
+    Invoke-Checked 'git' @('clone', '--quiet', '--depth', '1', $url, $stage) `
+        'Could not download the skills. Check your network connection and try running the installer again'
 }
 
 $dest = Join-Path $ClaudeHome 'skills'
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
+
+# A manifest of the skill names this installer put in $dest, so an update can tell "retired
+# upstream" apart from "the person made this themselves" — robocopy /MIR alone cannot.
+$manifestPath = Join-Path $dest '.claude-skills-manifest'
+$oldManifest = @()
+if (Test-Path $manifestPath) { $oldManifest = @(Get-Content $manifestPath | Where-Object { $_ }) }
+
 $count = 0
+$newManifest = @()
 foreach ($dir in Get-ChildItem -Directory (Join-Path $stage 'skills'))
 {
     $target = Join-Path $dest $dir.Name
-    # Mirror each skill folder on its own, so a skill removed upstream goes, but skills the
-    # person added themselves are never touched.
-    robocopy $dir.FullName $target /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    Invoke-Checked 'robocopy' @($dir.FullName, $target, '/MIR', '/NFL', '/NDL', '/NJH', '/NJS', '/NP') `
+        ('Could not copy the ' + $dir.Name + ' skill. Check that ' + $dest + ' is not open in another program and try again') `
+        8
+    $newManifest += $dir.Name
     $count++
+}
+
+foreach ($old in $oldManifest)
+{
+    if (($newManifest -notcontains $old) -and (Test-Path (Join-Path $dest $old)))
+    {
+        Remove-Item -Recurse -Force (Join-Path $dest $old)
+        Say ('removed ' + $old + ' (retired upstream)')
+    }
+}
+$newManifest | Set-Content $manifestPath
+
+# One-time cleanup: `resume` was renamed `pickup` before this manifest existed, so the loop
+# above has no record of it. Remove only our own copy, identified by its exact description —
+# never a skill the person wrote themselves that happens to share the name.
+$oldResume = Join-Path $dest 'resume'
+if ((Test-Path $oldResume) -and ($newManifest -notcontains 'resume'))
+{
+    $skillFile = Join-Path $oldResume 'SKILL.md'
+    if (Test-Path $skillFile)
+    {
+        $text = Get-Content $skillFile -Raw
+        if ($text -match '(?m)^name:\s*resume\s*$' -and $text -match 'Pick up a repo where a previous session left it')
+        {
+            Remove-Item -Recurse -Force $oldResume
+            Say 'removed resume (renamed to pickup)'
+        }
+    }
 }
 
 Write-Host ''
 Say ($count.ToString() + ' skills in ' + $dest)
+
+$policy = Get-ExecutionPolicy
+if ($policy -in @('Restricted', 'Undefined', 'AllSigned'))
+{
+    Say 'note: this PC''s PowerShell script policy will block "claude" (and npm) from running here.'
+    Say 'fix with: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned'
+    Say 'or just run "claude" from Command Prompt (cmd.exe) instead.'
+}
+
 if (-not (Test-Path (Join-Path $ClaudeHome '.credentials.json')))
 {
     Say 'next: open a new window, run "claude", and sign in when it asks'

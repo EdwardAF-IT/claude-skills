@@ -36,15 +36,20 @@
  *                         keep leaves the author's direction alone
  *   --label-cap <pt>      Largest a plate's labels print (default 10, the body size); a plate
  *                         is never enlarged past it just because the page has room
- *   --css <path>          Override the bundled stylesheet
+ *   --css <path>          Override the bundled stylesheet (its :root is the palette, plates included)
+ *
+ *   node build-magazine.mjs --mermaid-config <out.json> [--accent ...] [--css ...]
+ *                         Write the mermaid config the plates render with and build nothing;
+ *                         the diagram skill's magazine target measures with it.
  *   --no-verify           Skip the fidelity check (never for a shipped edition)
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 
@@ -54,12 +59,69 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.noDeprecation = true;
 const DEFAULT_CSS = path.resolve(__dirname, '..', 'assets', 'magazine.css');
 const MERMAID_THEME = path.resolve(__dirname, '..', 'assets', 'mermaid-theme.json');
+const GEOMETRY = JSON.parse(readFileSync(path.resolve(__dirname, '..', 'assets', 'geometry.json'), 'utf8'));
 
-// Fence languages that become plates, and the engine that draws each. A Graphviz fence is what
-// the diagram skill escalates a real graph to when mermaid cannot lay it out legibly. Graphviz
-// is installed by winget and is not on PATH in every shell, so its default location is tried too.
-const FIGURE_FENCES = { mermaid: 'mermaid', dot: 'dot', graphviz: 'dot' };
+// Graphviz is installed by winget and is not on PATH in every shell, so its default location is
+// tried too.
 const DOT_FALLBACK = 'C:\\Program Files\\Graphviz\\bin\\dot.exe';
+
+// ---------------------------------------------------------------- fences
+//
+// What a fence is, and which fences become plates: the diagram skill's fences.json, the one
+// definition the diagram gate, the edit gate and this builder all read. fenceAt mirrors that
+// skill's fences.py line for line; its tests/fences fixture pins every tool to one answer.
+// A Graphviz fence is what the diagram skill escalates a real graph to when mermaid cannot lay
+// it out legibly.
+
+const FENCES_JSON = path.resolve(__dirname, '..', '..', 'diagram', 'scripts', 'fences.json');
+if (!existsSync(FENCES_JSON)) {
+  throw new Error(`build-magazine: ${FENCES_JSON} is missing; the magazine needs the diagram skill installed beside it`);
+}
+const FENCE_SPEC = JSON.parse(readFileSync(FENCES_JSON, 'utf8'));
+// language as written (lower-case) -> the engine that draws it: mermaid | graphviz
+const DIAGRAM_LANGS = Object.fromEntries(Object.entries(FENCE_SPEC.diagramLanguages).map(([k, v]) => [k.toLowerCase(), v]));
+const ANY_LANGUAGE = Object.fromEntries(FENCE_SPEC.markers.map((m) => [m.char, m.anyLanguage]));
+const FENCE_OPENER = new RegExp(
+  '^[ \\t]*((?<ch>[' + Object.keys(ANY_LANGUAGE).map((c) => c.replace(/[\\\]^-]/g, '\\$&')).join('') +
+  '])\\k<ch>{' + (FENCE_SPEC.minLength - 1) + ',})[ \\t]*(.*?)[ \\t]*$');
+
+// { run, lang } when the line opens a fence, else null.
+function fenceOpener(line) {
+  const m = line.match(FENCE_OPENER);
+  if (!m) return null;
+  const run = m[1];
+  const info = m[3];
+  if (run[0] === '`' && info.includes('`')) return null;   // inline code, not a fence
+  const lang = info ? info.split(/\s+/)[0] : '';
+  if (!ANY_LANGUAGE[run[0]] && !Object.hasOwn(DIAGRAM_LANGS, lang.toLowerCase())) return null;
+  return { run, lang };
+}
+
+function isCloser(line, run) {
+  const s = line.trim();
+  return s.length >= run.length && [...s].every((c) => c === run[0]);
+}
+
+// The fence opening on line i, running to its closer (end) or the end of the document.
+function fenceAt(lines, i) {
+  const o = fenceOpener(lines[i]);
+  if (!o) return null;
+  let j = i + 1;
+  while (j < lines.length && !isCloser(lines[j], o.run)) j++;
+  const lower = o.lang.toLowerCase();
+  return { start: i, end: j, run: o.run, lang: o.lang, engine: Object.hasOwn(DIAGRAM_LANGS, lower) ? DIAGRAM_LANGS[lower] : null };
+}
+
+function scanFences(lines) {
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const f = fenceAt(lines, i);
+    if (f) { out.push(f); i = f.end; }
+  }
+  return out;
+}
+
+const splitLines = (md) => md.replace(/\r\n?/g, '\n').split('\n');
 
 // ---------------------------------------------------------------- document kinds
 //
@@ -124,14 +186,17 @@ function parseArgs(argv) {
       case '--accent': o.accent = val(); break;
       case '--mermaid': o.mermaid = val(); break;
       case '--diagram-direction': o.diagramDirection = val(); break;
-      case '--label-cap': PAGE.labelCapPt = Number(val()); break;
+      case '--label-cap': o.labelCap = Number(val()); break;
       case '--css': o.css = val(); break;
+      case '--mermaid-config': o.mermaidConfigOut = val(); break;
       case '--no-verify': o.verify = false; break;
       default:
         if (a.startsWith('--')) throw new Error(`unknown option: ${a}`);
         o.inputs.push(a);
     }
   }
+  if (o.accent && !/^#[0-9a-fA-F]{6}$/.test(o.accent)) throw new Error('--accent takes a #rrggbb color');
+  if (o.mermaidConfigOut) return o;   // writes the plates' mermaid config and builds nothing
   if (!o.out) throw new Error('--out <file.html> is required');
   if (!o.inputs.length) throw new Error('at least one markdown file is required');
   if (o.kind && !KINDS[o.kind]) throw new Error(`--kind must be one of ${Object.keys(KINDS).join(', ')}`);
@@ -203,7 +268,7 @@ const sepHtml = (sep) => (sep ? `<span class="sep">${sep === ':' ? ':' : ' ' + s
 // an opener; a ladder needs a run) and on the document kind.
 
 function parseBlocks(md, ctx) {
-  const lines = md.replace(/\r\n?/g, '\n').split('\n');
+  const lines = splitLines(md);
   const out = [];
   let i = 0;
 
@@ -215,16 +280,11 @@ function parseBlocks(md, ctx) {
     if (/^\s*<!--.*-->\s*$/.test(line)) { i++; continue; }   // an HTML comment is markup, not prose
 
     // fenced code / mermaid
-    const fence = line.match(/^\s*```+\s*(\S*)\s*$/);
+    const fence = fenceAt(lines, i);
     if (fence) {
-      const lang = fence[1];
-      const buf = [];
-      i++;
-      while (i < lines.length && !/^\s*```+\s*$/.test(lines[i])) buf.push(lines[i++]);
-      i++;
-      const body = buf.join('\n');
-      const engine = FIGURE_FENCES[lang];
-      out.push(engine ? { k: 'figure', src: body, engine } : { k: 'code', lang, body });
+      const body = lines.slice(i + 1, fence.end).join('\n');
+      i = fence.end + 1;
+      out.push(fence.engine ? { k: 'figure', src: body, engine: fence.engine } : { k: 'code', lang: fence.lang, body });
       continue;
     }
 
@@ -299,7 +359,7 @@ function parseBlocks(md, ctx) {
           parent.sub.push(item);
           stack.push({ indent, node: item });
           i++;
-        } else if (stack.length > 1 && /^\s+\S/.test(lines[i])) {
+        } else if (stack.length > 1 && /^\s+\S/.test(lines[i]) && !fenceOpener(lines[i])) {
           stack[stack.length - 1].node.text += ' ' + lines[i].trim();
           i++;
         } else break;
@@ -315,7 +375,7 @@ function parseBlocks(md, ctx) {
 
     // paragraph
     const buf = [];
-    while (i < lines.length && lines[i].trim() && !/^\s*(#{1,6}\s|>|\||```)/.test(lines[i]) && !isListLine(lines[i])) {
+    while (i < lines.length && lines[i].trim() && !/^\s*(#{1,6}\s|>|\|)/.test(lines[i]) && !fenceOpener(lines[i]) && !isListLine(lines[i])) {
       buf.push(lines[i++]);
     }
     if (buf.length) out.push({ k: 'p', raw: buf.join(' ') });
@@ -350,11 +410,13 @@ function docStats(blocks) {
 
 // ---------------------------------------------------------------- renderers
 
+// A list item's nested sub-list, rendered inline wherever an item may carry one.
+const renderSub = (it) => (it.sub.length ? renderList(it.sub, it.sub[0].ordered) : '');
+
 function renderItems(items) {
   return items.map((it) => {
     const cls = it.task === null ? '' : it.task ? ' class="done"' : ' class="todo"';
-    const sub = it.sub.length ? renderList(it.sub, it.sub[0].ordered) : '';
-    return `<li${cls}>${inline(it.text)}${sub}</li>`;
+    return `<li${cls}>${inline(it.text)}${renderSub(it)}</li>`;
   }).join('');
 }
 
@@ -563,9 +625,8 @@ const renderCardGrid = (b, span) =>
 
 const renderRunInItem = (it) => {
   const { label, sep, rest } = splitLead(it.text);
-  const sub = it.sub.length ? renderList(it.sub, it.sub[0].ordered) : '';
   const long = words(it.text) > LONG_ITEM_WORDS ? ' class="long"' : '';
-  return `<li${long}><span class="runin-label">${inline(label)}</span>${sepHtml(sep)}${inline(rest)}${sub}</li>`;
+  return `<li${long}><span class="runin-label">${inline(label)}</span>${sepHtml(sep)}${inline(rest)}${renderSub(it)}</li>`;
 };
 
 const renderRunIn = (b) => {
@@ -573,7 +634,7 @@ const renderRunIn = (b) => {
   const start = b.start || 1;
   return `<${tag} class="runin">${b.items.map((it, k) => {
     const { label, sep, rest } = splitLead(it.text);
-    const sub = it.sub.length ? renderList(it.sub, it.sub[0].ordered) : '';
+    const sub = renderSub(it);
     const long = words(it.text) > LONG_ITEM_WORDS ? ' class="long"' : '';
     // An ordered run-in keeps its numbers: the prose refers to "kind 1" and the list must show it.
     const badge = b.ordered ? `<span class="rung-badge">${start + k}</span> ` : '';
@@ -627,215 +688,242 @@ function isDeck(p) {
 const FIGURE_LEAD = /\b(flow|figure|diagram|arrows?|edges?|sequence|state machine|ladder|below|as a (?:flow|sequence|graph))\b/i;
 const isFigureLead = (p) => words(p.raw) <= 60 && (/:\s*$/.test(p.raw) || FIGURE_LEAD.test(p.raw));
 
-function structure(blocks, kind, ctx) {
-  const span = kind.columns ? ' full' : '';
+// The emitter carries the state that used to be closed over directly by `structure()`
+// (`sectionWords`, `sinceEntry`, `sectionHasQuote`, `pendingQuote`, `dropcapArmed`), plus the
+// small set of functions every block-kind handler below needs: `emit`/`push` to place HTML,
+// `considerQuote` to offer a pull-quote candidate, `paragraph` for a plain paragraph. Bundling
+// them here, instead of each handler closing over its own copies, is what keeps the handlers
+// callable and testable on their own.
+function createEmitter(kind) {
   const out = [];
-  let sectionWords = 0;
-  let sinceEntry = 0;        // words since the reader last had a non-text entry point
-  let sectionHasQuote = false;
-  let pendingQuote = null;   // a pull-quote waiting to be placed one block after its source
-  let dropcapArmed = false;
+  const state = {
+    sectionWords: 0,
+    sinceEntry: 0,        // words since the reader last had a non-text entry point
+    sectionHasQuote: false,
+    pendingQuote: null,    // a pull-quote waiting to be placed one block after its source
+    dropcapArmed: false,
+  };
 
   const textWords = (html) => words(html.replace(/<[^>]+>/g, ' '));
   const emit = (html) => {
     const w = textWords(html);
-    sectionWords += w;
+    state.sectionWords += w;
     out.push({ html, full: / class="[^"]*full/.test(html.slice(0, 120)), plate: /<figure class="[^"]*plate/.test(html.slice(0, 80)), landscape: /<figure class="[^"]*plate-landscape/.test(html.slice(0, 80)), tall: /<figure class="diagram tall/.test(html.slice(0, 40)), words: w });
   };
   const push = (html, entry) => {
     emit(html);
-    if (entry) sinceEntry = 0;
-    if (pendingQuote) { emit(pendingQuote); pendingQuote = null; sinceEntry = 0; }
+    if (entry) state.sinceEntry = 0;
+    if (state.pendingQuote) { emit(state.pendingQuote); state.pendingQuote = null; state.sinceEntry = 0; }
   };
 
   // The focal rule's pick: the next sentence the author chose to emphasise, verbatim, when a
   // page-turn of body text has passed with no other entry point.
   const considerQuote = (raw) => {
-    if (!(kind.pullquote && !pendingQuote && sinceEntry > PULLQUOTE_GAP_WORDS && sectionWords > PULLQUOTE_SECTION_MIN)) return;
+    if (!(kind.pullquote && !state.pendingQuote && state.sinceEntry > PULLQUOTE_GAP_WORDS && state.sectionWords > PULLQUOTE_SECTION_MIN)) return;
     const pick = [...raw.matchAll(/\*\*([^*]{20,220})\*\*/g)]
       .map((m) => m[1])
       .find((q) => words(q) >= PULLQUOTE_MIN_WORDS && words(q) <= 30 && !raw.trim().startsWith('**' + q));
     if (pick) {
       const long = words(pick) >= 24;
-      pendingQuote = `<p class="pullquote${long && kind.columns ? ' full' : ''}">${inline(pick)}</p>`;
+      state.pendingQuote = `<p class="pullquote${long && kind.columns ? ' full' : ''}">${inline(pick)}</p>`;
     }
   };
 
   const paragraph = (p) => {
     const w = words(p.raw);
-    sinceEntry += w;
+    state.sinceEntry += w;
     const cls = [];
-    if (dropcapArmed && kind.dropcap && w >= DROPCAP_MIN_WORDS && /^[A-Za-z]/.test(p.raw)) cls.push('dropcap');
-    dropcapArmed = false;
+    if (state.dropcapArmed && kind.dropcap && w >= DROPCAP_MIN_WORDS && /^[A-Za-z]/.test(p.raw)) cls.push('dropcap');
+    state.dropcapArmed = false;
     push(`<p${cls.length ? ` class="${cls.join(' ')}"` : ''}>${inline(p.raw)}</p>`);
     considerQuote(p.raw);
   };
 
+  return { out, state, emit, push, considerQuote, paragraph };
+}
+
+// An opener starts a new section: word counters reset, its own heading is emitted, and the
+// paragraph right after it becomes the deck when it reads like one. Returns the block index to
+// resume from (the loop's own increment still applies on top of this, as everywhere below).
+function handleOpener(b, i, blocks, kind, ctx, em, span) {
+  em.state.sectionWords = 0; em.state.sinceEntry = 0; em.state.sectionHasQuote = false; em.state.pendingQuote = null;
+  ctx.toc.push({ id: b.id, text: b.text, num: b.num ? b.num.replace(/[.)]$/, '') : null });
+  em.emit(`<header class="opener${span}" id="${b.id}">` +
+    `<span class="numeral">${b.num ? esc(b.num) : ''}</span> <h2>${inline(b.text)}</h2></header>`);
+  const nxt = blocks[i + 1];
+  let next = i;
+  if (kind.deck && nxt && nxt.k === 'p' && isDeck(nxt)) {
+    em.emit(`<p class="deck${span}">${inline(nxt.raw)}</p>`);
+    next++;
+  }
+  em.state.dropcapArmed = true;
+  return next;
+}
+
+// A heading, with two recognisers of its own: a `### Q1.` question badge, and an h4 that runs
+// into a short paragraph below it as a magazine sub-head.
+function handleHeading(b, i, blocks, em) {
+  const q = b.level === 3 ? b.text.match(/^(Q\d+\.)\s+(.*)$/s) : null;
+  const text = q ? `<span class="q-badge">${esc(q[1])}</span> ${inline(q[2])}` : inline(b.text);
+  const nxt = blocks[i + 1];
+  const runin = b.level === 4 && nxt && nxt.k === 'p' && words(nxt.raw) <= RUNIN_HEAD_MAX_WORDS &&
+    !BOLD_LEAD.test(nxt.raw) && !(blocks[i + 2] && blocks[i + 2].k === 'figure' && isFigureLead(nxt));
+  const cls = runin ? ' class="runin-head"' : q ? ' class="question"' : '';
+  em.push(`<h${b.level} id="${b.id}"${cls}>${text}</h${b.level}>`, true);
+}
+
+// A paragraph: a verdict panel, a run of bold-lead paragraphs that makes a ladder, a caption
+// before a figure, a lone bold lead, or plain prose — in that order of preference. Returns the
+// block index to resume from, same convention as `handleOpener`.
+function handleParagraph(b, i, blocks, kind, ctx, em, span) {
+  // A paragraph that opens by announcing a verdict is the answer to the section: give it a
+  // panel so the eye finds it without reading the section first.
+  const lead = b.raw.match(BOLD_LEAD);
+  if (lead && VERDICT_LEXICON.test(lead[1])) {
+    const { label, sep, rest } = splitLead(b.raw);
+    em.push(`<aside class="verdict${span}"><span class="verdict-label">${inline(label)}${sepHtml(sep)}</span> <p>${inline(rest)}</p></aside>`, true);
+    return i;
+  }
+
+  // A run of three or more bold-lead paragraphs, each optionally followed by its own list, is
+  // a ladder, not prose. The list becomes the rung's fields when every item has a lead.
+  if (kind.ladder && lead) {
+    const units = [];
+    let j = i;
+    while (blocks[j] && blocks[j].k === 'p' && BOLD_LEAD.test(blocks[j].raw) && !VERDICT_LEXICON.test(blocks[j].raw.match(BOLD_LEAD)[1])) {
+      const list = blocks[j + 1] && blocks[j + 1].k === 'list' && !blocks[j + 1].taskList ? blocks[j + 1] : null;
+      units.push({ p: blocks[j], list });
+      j += list ? 2 : 1;
+    }
+    // Three make a ladder; a pair does too when both leads are short ("Performance: no.",
+    // "Reliability: …") — the same shape, and the caution against false positives was the
+    // three, not the pair.
+    const shortPair = units.length === 2 && units.every((u) => words(splitLead(u.p.raw).label) <= LADDER_PAIR_LEAD_WORDS);
+    if (units.length >= 3 || shortPair) {
+      const numbered = units.every((u) => NUMBERED_LEAD.test(splitLead(u.p.raw).label));
+      const html = units.map((u) => {
+        const { label, sep, rest } = splitLead(u.p.raw);
+        return renderRung(label, sep, rest, rungListHtml(u.list), numbered);
+      }).join('');
+      em.push(`<div class="ladder">${html}</div>`, true);
+      return j - 1;
+    }
+  }
+
+  // A short paragraph that introduces the plate is set as its caption, in its own place,
+  // inside the plate's frame so the two are one unbreakable unit.
+  const nxt = blocks[i + 1];
+  if (nxt && nxt.k === 'figure' && isFigureLead(b)) {
+    const leadHtml = `<p class="figure-lead">${inline(b.raw)}</p>`;
+    const leadIn = ((Math.ceil(stripMd(b.raw).length / 100) + 0.5) * 11.5 + 8) / 72;
+    em.push(renderFigure(nxt.src, ctx, kind, leadHtml, leadIn, nxt.engine), true);
+    return i + 1;
+  }
+
+  // A lone bold-lead paragraph outside a ladder: the lead set in sans, so the eye catches
+  // it. One paragraph, not a rung — no rule, no ground.
+  if (kind.ladder && lead) {
+    const { label, sep, rest } = splitLead(b.raw);
+    em.state.sinceEntry += words(b.raw);
+    em.state.dropcapArmed = false;
+    em.push(`<p class="lead"><span class="runin-label">${inline(label)}</span>${sepHtml(sep)}${inline(rest)}</p>`);
+    em.considerQuote(b.raw);
+    return i;
+  }
+
+  em.paragraph(b);
+  return i;
+}
+
+// A list, classified once (`classifyList`) into the shape it prints as.
+function handleList(b, kind, span, em) {
+  const kindOf = classifyList(b, kind);
+  const itemWords = b.items.map((it) => words(it.text) + words(it.sub.map((x) => x.text).join(' ')));
+  const total = itemWords.reduce((a, c) => a + c, 0);
+  const longItems = (kindOf === 'runin' || kindOf === 'list') && total / itemWords.length > LONG_ITEM_WORDS;
+  if (kindOf === 'cardgrid') em.push(renderCardGrid(b, span), true);
+  else if (kindOf === 'fielded') em.push(renderFielded(b), true);
+  else if (longItems) {
+    // A list whose items run to paragraphs is prose with bullets, not a set of things the
+    // eye can take in: it counts as text for the focal rule, and may lend it a sentence. It
+    // is emitted in pieces so a quote can sit one item after its source, the numbering intact.
+    const tag = b.ordered ? 'ol' : 'ul';
+    const cls = kindOf === 'runin' ? ' class="runin"' : b.taskList ? ' class="task"' : '';
+    let piece = [];
+    let start = 1;
+    const flushPiece = () => {
+      if (!piece.length) return;
+      em.push(`<${tag}${cls}${b.ordered && start > 1 ? ` start="${start}"` : ''}>${piece.join('')}</${tag}>`, false);
+      start += piece.length; piece = [];
+    };
+    b.items.forEach((it, k) => {
+      em.state.sinceEntry += itemWords[k];
+      piece.push(kindOf === 'runin' ? renderRunInItem(it) : renderItems([it]));
+      if (em.state.pendingQuote) flushPiece();
+      em.considerQuote(it.text);
+    });
+    flushPiece();
+  }
+  else if (kindOf === 'runin') em.push(renderRunIn(b), true);
+  else { em.state.sinceEntry += total; em.push(renderList(b.items, b.ordered, b.taskList ? 'task' : ''), false); }
+}
+
+// A table, classified once (`classifyTable`) into cards, a definition list, or a plain table.
+function handleTable(b, kind, span, em) {
+  const t = kind.cards ? classifyTable(b) : 'table';
+  if (t === 'cards') em.push(renderRecordCards(b, span), true);
+  else if (t === 'deflist') em.push(renderDefList(b), true);
+  else {
+    // A table wider than about two columns cannot shrink to a column's measure — long
+    // identifiers set a min-content width it refuses to go below — so it becomes a
+    // full-measure exhibit instead of overflowing into the neighbouring column.
+    const widest = Math.max(0, ...[b.head, ...b.rows].flat().map((c) => String(c).length));
+    const full = kind.columns && (b.cols >= 3 || widest > 90);
+    em.push(renderTable(b, full ? ' full' : ''), true);
+  }
+}
+
+function handleCode(b, kind, em) {
+  // A code block whose lines are long wraps on every line inside a column, which is
+  // unreadable. Give it the full measure.
+  const longest = Math.max(0, ...b.body.split('\n').map((l) => l.length));
+  const full = kind.columns && longest > 58;
+  em.push(`<pre${full ? ' class="full"' : ''}><code>${highlight(b.body, b.lang)}</code></pre>`, true);
+}
+
+function handleQuote(b, kind, ctx, span, em) {
+  const inner = structure(b.inner, { ...kind, deck: false, pullquote: false, dropcap: false, ladder: false, cards: false, columns: false }, { ...ctx, toc: [] }).map((x) => x.html).join('\n');
+  if (b.colophon && kind.colophon) em.push(`<div class="colophon${span}">${inner}</div>`);
+  else { em.state.sectionHasQuote = true; em.push(`<blockquote${words(inner.replace(/<[^>]+>/g, ' ')) > 80 ? ' class="long"' : ''}>${inner}</blockquote>`); }
+}
+
+// Runs over the whole block list once it is known, because the deck needs the paragraph after an
+// opener, a ladder needs a run, and the pull-quote needs to know how long it has been since the
+// reader last had something other than body text to land on. Every transform re-containers text:
+// nothing is rewritten, reordered, trimmed or summarised. A pull-quote is a duplicate and the
+// sentence stays in the prose; card labels are the table's own header words. The loop below is a
+// dispatch table; each block kind's own decision lives in its handler above.
+function structure(blocks, kind, ctx) {
+  const span = kind.columns ? ' full' : '';
+  const em = createEmitter(kind);
+
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
-
-    if (b.k === 'opener') {
-      sectionWords = 0; sinceEntry = 0; sectionHasQuote = false; pendingQuote = null;
-      ctx.toc.push({ id: b.id, text: b.text, num: b.num ? b.num.replace(/[.)]$/, '') : null });
-      emit(`<header class="opener${span}" id="${b.id}">` +
-        `<span class="numeral">${b.num ? esc(b.num) : ''}</span> <h2>${inline(b.text)}</h2></header>`);
-      const nxt = blocks[i + 1];
-      if (kind.deck && nxt && nxt.k === 'p' && isDeck(nxt)) {
-        emit(`<p class="deck${span}">${inline(nxt.raw)}</p>`);
-        i++;
-      }
-      dropcapArmed = true;
-      continue;
+    switch (b.k) {
+      case 'opener': i = handleOpener(b, i, blocks, kind, ctx, em, span); continue;
+      case 'h': handleHeading(b, i, blocks, em); continue;
+      case 'p': i = handleParagraph(b, i, blocks, kind, ctx, em, span); continue;
+      case 'list': handleList(b, kind, span, em); continue;
+      case 'table': handleTable(b, kind, span, em); continue;
+      case 'code': handleCode(b, kind, em); continue;
+      case 'figure': em.push(renderFigure(b.src, ctx, kind, '', 0, b.engine), true); continue;
+      case 'quote': handleQuote(b, kind, ctx, span, em); continue;
+      case 'hr': em.push('<hr>'); continue;
+      default: continue;
     }
-
-    if (b.k === 'h') {
-      // A question heading carries its number as a badge, the way a numbered rung does.
-      const q = b.level === 3 ? b.text.match(/^(Q\d+\.)\s+(.*)$/s) : null;
-      const text = q ? `<span class="q-badge">${esc(q[1])}</span> ${inline(q[2])}` : inline(b.text);
-      // An h4 over one short paragraph is a magazine sub-head: set on the paragraph's first line.
-      const nxt = blocks[i + 1];
-      const runin = b.level === 4 && nxt && nxt.k === 'p' && words(nxt.raw) <= RUNIN_HEAD_MAX_WORDS &&
-        !BOLD_LEAD.test(nxt.raw) && !(blocks[i + 2] && blocks[i + 2].k === 'figure' && isFigureLead(nxt));
-      const cls = runin ? ' class="runin-head"' : q ? ' class="question"' : '';
-      push(`<h${b.level} id="${b.id}"${cls}>${text}</h${b.level}>`, true);
-      continue;
-    }
-
-    if (b.k === 'p') {
-      // A paragraph that opens by announcing a verdict is the answer to the section: give it a
-      // panel so the eye finds it without reading the section first.
-      const lead = b.raw.match(BOLD_LEAD);
-      if (lead && VERDICT_LEXICON.test(lead[1])) {
-        const { label, sep, rest } = splitLead(b.raw);
-        push(`<aside class="verdict${span}"><span class="verdict-label">${inline(label)}${sepHtml(sep)}</span> <p>${inline(rest)}</p></aside>`, true);
-        continue;
-      }
-
-      // A run of three or more bold-lead paragraphs, each optionally followed by its own list, is
-      // a ladder, not prose. The list becomes the rung's fields when every item has a lead.
-      if (kind.ladder && lead) {
-        const units = [];
-        let j = i;
-        while (blocks[j] && blocks[j].k === 'p' && BOLD_LEAD.test(blocks[j].raw) && !VERDICT_LEXICON.test(blocks[j].raw.match(BOLD_LEAD)[1])) {
-          const list = blocks[j + 1] && blocks[j + 1].k === 'list' && !blocks[j + 1].taskList ? blocks[j + 1] : null;
-          units.push({ p: blocks[j], list });
-          j += list ? 2 : 1;
-        }
-        // Three make a ladder; a pair does too when both leads are short ("Performance: no.",
-        // "Reliability: …") — the same shape, and the caution against false positives was the
-        // three, not the pair.
-        const shortPair = units.length === 2 && units.every((u) => words(splitLead(u.p.raw).label) <= LADDER_PAIR_LEAD_WORDS);
-        if (units.length >= 3 || shortPair) {
-          const numbered = units.every((u) => NUMBERED_LEAD.test(splitLead(u.p.raw).label));
-          const html = units.map((u) => {
-            const { label, sep, rest } = splitLead(u.p.raw);
-            return renderRung(label, sep, rest, rungListHtml(u.list), numbered);
-          }).join('');
-          push(`<div class="ladder">${html}</div>`, true);
-          i = j - 1;
-          continue;
-        }
-      }
-
-      // A short paragraph that introduces the plate is set as its caption, in its own place,
-      // inside the plate's frame so the two are one unbreakable unit.
-      const nxt = blocks[i + 1];
-      if (nxt && nxt.k === 'figure' && isFigureLead(b)) {
-        const lead = `<p class="figure-lead">${inline(b.raw)}</p>`;
-        const leadIn = ((Math.ceil(stripMd(b.raw).length / 100) + 0.5) * 11.5 + 8) / 72;
-        push(renderFigure(nxt.src, ctx, kind, lead, leadIn, nxt.engine), true);
-        i++;
-        continue;
-      }
-
-      // A lone bold-lead paragraph outside a ladder: the lead set in sans, so the eye catches
-      // it. One paragraph, not a rung — no rule, no ground.
-      if (kind.ladder && lead) {
-        const { label, sep, rest } = splitLead(b.raw);
-        sinceEntry += words(b.raw);
-        dropcapArmed = false;
-        push(`<p class="lead"><span class="runin-label">${inline(label)}</span>${sepHtml(sep)}${inline(rest)}</p>`);
-        considerQuote(b.raw);
-        continue;
-      }
-
-      paragraph(b);
-      continue;
-    }
-
-    if (b.k === 'list') {
-      const kindOf = classifyList(b, kind);
-      const itemWords = b.items.map((it) => words(it.text) + words(it.sub.map((x) => x.text).join(' ')));
-      const total = itemWords.reduce((a, c) => a + c, 0);
-      const longItems = (kindOf === 'runin' || kindOf === 'list') && total / itemWords.length > LONG_ITEM_WORDS;
-      if (kindOf === 'cardgrid') push(renderCardGrid(b, span), true);
-      else if (kindOf === 'fielded') push(renderFielded(b), true);
-      else if (longItems) {
-        // A list whose items run to paragraphs is prose with bullets, not a set of things the
-        // eye can take in: it counts as text for the focal rule, and may lend it a sentence. It
-        // is emitted in pieces so a quote can sit one item after its source, the numbering intact.
-        const tag = b.ordered ? 'ol' : 'ul';
-        const cls = kindOf === 'runin' ? ' class="runin"' : b.taskList ? ' class="task"' : '';
-        let piece = [];
-        let start = 1;
-        const flushPiece = () => {
-          if (!piece.length) return;
-          push(`<${tag}${cls}${b.ordered && start > 1 ? ` start="${start}"` : ''}>${piece.join('')}</${tag}>`, false);
-          start += piece.length; piece = [];
-        };
-        b.items.forEach((it, k) => {
-          sinceEntry += itemWords[k];
-          piece.push(kindOf === 'runin' ? renderRunInItem(it) : renderItems([it]));
-          if (pendingQuote) flushPiece();
-          considerQuote(it.text);
-        });
-        flushPiece();
-      }
-      else if (kindOf === 'runin') push(renderRunIn(b), true);
-      else { sinceEntry += total; push(renderList(b.items, b.ordered, b.taskList ? 'task' : ''), false); }
-      continue;
-    }
-
-    if (b.k === 'table') {
-      const t = kind.cards ? classifyTable(b) : 'table';
-      if (t === 'cards') push(renderRecordCards(b, span), true);
-      else if (t === 'deflist') push(renderDefList(b), true);
-      else {
-        // A table wider than about two columns cannot shrink to a column's measure — long
-        // identifiers set a min-content width it refuses to go below — so it becomes a
-        // full-measure exhibit instead of overflowing into the neighbouring column.
-        const widest = Math.max(0, ...[b.head, ...b.rows].flat().map((c) => String(c).length));
-        const full = kind.columns && (b.cols >= 3 || widest > 90);
-        push(renderTable(b, full ? ' full' : ''), true);
-      }
-      continue;
-    }
-
-    if (b.k === 'code') {
-      // A code block whose lines are long wraps on every line inside a column, which is
-      // unreadable. Give it the full measure.
-      const longest = Math.max(0, ...b.body.split('\n').map((l) => l.length));
-      const full = kind.columns && longest > 58;
-      push(`<pre${full ? ' class="full"' : ''}><code>${highlight(b.body, b.lang)}</code></pre>`, true);
-      continue;
-    }
-
-    if (b.k === 'figure') {
-      push(renderFigure(b.src, ctx, kind, '', 0, b.engine), true);
-      continue;
-    }
-
-    if (b.k === 'quote') {
-      const inner = structure(b.inner, { ...kind, deck: false, pullquote: false, dropcap: false, ladder: false, cards: false, columns: false }, { ...ctx, toc: [] }).map((x) => x.html).join('\n');
-      if (b.colophon && kind.colophon) push(`<div class="colophon${span}">${inner}</div>`);
-      else { sectionHasQuote = true; push(`<blockquote${words(inner.replace(/<[^>]+>/g, ' ')) > 80 ? ' class="long"' : ''}>${inner}</blockquote>`); }
-      continue;
-    }
-
-    if (b.k === 'hr') { push('<hr>'); continue; }
   }
-  if (pendingQuote) emit(pendingQuote);
-  return out;
+  if (em.state.pendingQuote) em.emit(em.state.pendingQuote);
+  return em.out;
 }
 
 // Lay the blocks out. In a columned edition every run of column-flow blocks becomes its own
@@ -958,26 +1046,30 @@ function normaliseMermaid(src, ctx) {
   return s;
 }
 
-// The page geometry the plate rules are computed against, per orientation. Keep in step with
-// magazine.css (@page margins, the column width, the figure chrome).
-const PORTRAIT = {
-  measureIn: 7.5,          // Letter less the 0.5in side margins
-  boxIn: 9.85,             // content box height: 11 - 0.58 - 0.55 = 9.87
-  columnIn: 3.45,          // a column (3.65in) less the figure's padding
-  sideIn: 2.6,             // the widest a turned plate may float at the left of a single column
-};
-const LANDSCAPE = {
-  measureIn: 10.2,         // Letter landscape less the 0.4in side margins
-  boxIn: 7.63,             // 8.5 - 0.4 - 0.45 = 7.65
-  columnIn: 4.8,
-  sideIn: 3.0,
-};
+// The page geometry the plate rules are computed against, per orientation, derived from
+// assets/geometry.json — the one home of the page's numbers, which magazine.css is pinned to by
+// tests/geometry.test.mjs and the diagram skill's magazine target reads too.
+function pageGeometry(orientation) {
+  const g = GEOMETRY[orientation];
+  const m = g.marginIn;
+  const measureIn = g.pageIn.width - 2 * m.side;
+  return {
+    measureIn,                                                       // the page less its side margins
+    boxIn: g.pageIn.height - m.top - m.bottom - GEOMETRY.safetyIn,   // the content box, less a hair so a plate sized to it never tips over
+    columnIn: (measureIn - GEOMETRY.columnGapPx / GEOMETRY.pxPerIn) / 2 - GEOMETRY.figureInsetIn,  // a column less the figure's inset
+    sideIn: g.sideIn,                                                // the widest a turned plate may float beside a single column
+    marginIn: m,
+  };
+}
+const PORTRAIT = pageGeometry('portrait');
+const LANDSCAPE = pageGeometry('landscape');
 const PAGE = {
   inflowCapIn: 0.6,        // an in-flow plate never takes more than 60% of a page
   labelFloorPt: 7,         // no label prints smaller than this without a warning
   labelTargetPt: 8,        // the size a placement is chosen for when one can reach it
   labelCapPt: 10,          // no label prints larger than this: body size (--label-cap overrides)
 };
+const CSS_PX_TO_PT = 0.75; // 96 CSS px/in / 72 pt/in — mermaid's theme font size is in CSS px
 
 function svgSize(svg) {
   const vb = svg.match(/viewBox="\s*[-\d.eE+]+\s+[-\d.eE+]+\s+([\d.eE+]+)\s+([\d.eE+]+)\s*"/);
@@ -1029,10 +1121,10 @@ const LANDSCAPE_MIN_SHARE = 0.4;    // a landscape sheet is earned by a plate th
 const STRIP_ASPECT = 3;             // wider than this, relative to height, is a strip
 
 function placePlate(size, labelPx, kind, extraIn = 0) {
-  const pxPerIn = 96;
+  const pxPerIn = GEOMETRY.pxPerIn;
   const G = kind.landscape ? LANDSCAPE : PORTRAIT;
   const chrome = FIGURE_CHROME_IN + extraIn;
-  const labelPt = (scale) => labelPx * 0.75 * scale;
+  const labelPt = (scale) => labelPx * CSS_PX_TO_PT * scale;
   const fit = (wIn, hIn) => Math.min(1, wIn * pxPerIn / size.w, (hIn - chrome) * pxPerIn / size.h);
   // A turned plate: its width runs down the page, its height across.
   const fitTurned = (wIn, hIn) => Math.min(1, (hIn - chrome) * pxPerIn / size.w, wIn * pxPerIn / size.h);
@@ -1060,23 +1152,77 @@ function placePlate(size, labelPx, kind, extraIn = 0) {
   // A plate is sized for its labels, not for the room on the page: past the cap (body size by
   // default) a bigger picture says nothing more and costs the page the text that would have
   // sat under it. Two 12pt sequence plates with a sentence between once took a page each.
-  const capScale = PAGE.labelCapPt / (labelPx * 0.75);
+  const capScale = PAGE.labelCapPt / (labelPx * CSS_PX_TO_PT);
   if (pick.scale > capScale) pick = { ...pick, scale: capScale };
   const wIn = size.w * pick.scale / pxPerIn;
   const hIn = size.h * pick.scale / pxPerIn;
   return { ...pick, labelPt: labelPt(pick.scale), wIn, hIn, boxW: pick.turned ? hIn : wIn, boxH: pick.turned ? wIn : hIn };
 }
 
+// ---------------------------------------------------------------- palette
+//
+// The edition's named colors have one home: the stylesheet's :root. The plates take theirs from
+// it too — mermaid-theme.json names every color as var(--name), resolved here — so --accent,
+// which overrides :root, recolors the plates as well as the page.
+
+const ACCENT_BG_ALPHA = '1f';   // a custom accent's ground: the accent at this alpha over paper
+
+function paletteOf(css, accent = null) {
+  const root = ((css.match(/:root\s*\{([^}]*)\}/) || [])[1] || '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const vars = {};
+  for (const m of root.matchAll(/--([\w-]+)\s*:\s*([^;]+);/g)) vars[m[1]] = m[2].trim();
+  if (accent) {
+    vars.accent = accent;
+    vars['accent-bg'] = overPaper(accent, parseInt(ACCENT_BG_ALPHA, 16) / 255);
+  }
+  return vars;
+}
+
+// A translucent color laid on white paper, as the opaque hex a renderer can derive shades from.
+function overPaper(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c) => Math.round(c * alpha + 255 * (1 - alpha)).toString(16).padStart(2, '0');
+  return `#${mix(n >> 16)}${mix((n >> 8) & 255)}${mix(n & 255)}`;
+}
+
+function named(palette, name) {
+  if (!Object.hasOwn(palette, name)) throw new Error(`the stylesheet's :root does not define --${name}, which the plates use`);
+  return palette[name];
+}
+
+// The mermaid config the plates render with: mermaid-theme.json with its var(--name) colors
+// resolved against the palette.
+function mermaidConfig(palette) {
+  const resolve = (v) => {
+    if (typeof v === 'string') return v.replace(/var\(--([\w-]+)\)/g, (_, name) => named(palette, name));
+    if (Array.isArray(v)) return v.map(resolve);
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, resolve(x)]));
+    return v;
+  };
+  return resolve(JSON.parse(readFileSync(MERMAID_THEME, 'utf8')));
+}
+
+// Written once per build (per palette), where mmdc can read it.
+function mermaidConfigFile(shared) {
+  if (!shared.mermaidConfigFile) {
+    const text = JSON.stringify(mermaidConfig(shared.palette), null, 2);
+    const file = path.join(mkdtempWorkdir(), `mermaid-config-${createHash('sha1').update(text).digest('hex').slice(0, 12)}.json`);
+    writeFileSync(file, text, 'utf8');
+    shared.mermaidConfigFile = file;
+  }
+  return shared.mermaidConfigFile;
+}
+
 const svgCache = new Map();
-function renderMermaidSvg(src, n, suffix) {
-  if (svgCache.has(src)) return svgCache.get(src);
+function renderMermaidSvg(src, n, suffix, configFile) {
+  const key = `${configFile}\n${src}`;
+  if (svgCache.has(key)) return svgCache.get(key);
   const dir = mkdtempWorkdir();
   const inFile = path.join(dir, `d${n}${suffix}.mmd`);
   const outFile = path.join(dir, `d${n}${suffix}.svg`);
   writeFileSync(inFile, src, 'utf8');
   try {
-    const themeArgs = existsSync(MERMAID_THEME) ? ['-c', MERMAID_THEME] : [];
-    execFileSync(findMmdc(), ['-i', inFile, '-o', outFile, '-b', 'transparent', ...themeArgs], {
+    execFileSync(findMmdc(), ['-i', inFile, '-o', outFile, '-b', 'transparent', '-c', configFile], {
       stdio: ['ignore', 'ignore', 'pipe'],
       encoding: 'utf8',
       shell: process.platform === 'win32',
@@ -1086,7 +1232,7 @@ function renderMermaidSvg(src, n, suffix) {
     throw new Error(`figure ${n}: mmdc could not render it — ${why}`);
   }
   const svg = readFileSync(outFile, 'utf8').replace(/<\?xml[^>]*\?>/, '');
-  svgCache.set(src, svg);
+  svgCache.set(key, svg);
   return svg;
 }
 
@@ -1137,17 +1283,23 @@ function renderDotSvg(src, n, suffix) {
 // new names is coloured like the first one; ink-soft only when a plate has more actors than hues.
 // Lifelines, arrows and message text stay ink. Keyed by the printed label, not the alias, so
 // "ExecutionBroker" is one colour whatever a figure calls it.
-const ACTOR_HUES = [
-  { fill: '#e9eff9', stroke: '#2456a6' },   // blue
-  { fill: '#e9f5ee', stroke: '#1f7a4d' },   // green
-  { fill: '#f1e9f7', stroke: '#6b3fa0' },   // violet
-  { fill: '#e6f2f3', stroke: '#2d8a8f' },   // teal
-  { fill: '#faf1de', stroke: '#b3781c' },   // amber
-  { fill: '#fbeee1', stroke: '#c1631f' },   // orange
-];
-const ACTOR_HUE_REST = { fill: '#eceff3', stroke: '#5b6672' };
+const ACTOR_HUE_NAMES = ['blue', 'green', 'violet', 'teal', 'amber', 'orange'];
+
+// The hues, built once per build from the palette: identity matters, since an actor keeps the
+// hue object it was first given across every plate.
+function actorHues(shared) {
+  if (!shared.hues) {
+    const p = shared.palette;
+    shared.hues = {
+      hues: ACTOR_HUE_NAMES.map((h) => ({ fill: named(p, `${h}-bg`), stroke: named(p, h) })),
+      rest: { fill: named(p, 'shell'), stroke: named(p, 'ink-soft') },
+    };
+  }
+  return shared.hues;
+}
 
 function colourActors(svg, n, ctx) {
+  const { hues: ACTOR_HUES, rest: ACTOR_HUE_REST } = actorHues(ctx.shared);
   const id = `fig${n}-svg`;
   let out = svg.replace(/my-svg/g, id);
   const rules = [];
@@ -1192,7 +1344,7 @@ function flipDirection(src) {
 }
 
 function renderFigure(rawSrc, ctx, kind, leadHtml = '', leadIn = 0, engine = 'mermaid') {
-  const dot = engine === 'dot';
+  const dot = engine === 'graphviz';
   const src = dot ? rawSrc : normaliseMermaid(rawSrc, ctx);
   const n = ctx.figure++;
   const label = `${leadHtml}<span class="figure-label">Figure ${n}</span>`;
@@ -1212,7 +1364,7 @@ function renderFigure(rawSrc, ctx, kind, leadHtml = '', leadIn = 0, engine = 'me
     throw new Error('mmdc is not on PATH and the document has a mermaid diagram. Install it once: npm i -g @mermaid-js/mermaid-cli (or pass --mermaid cdn for a screen-only preview).');
   }
   const attempt = (source, suffix) => {
-    const svg = dot ? renderDotSvg(source, n, suffix) : renderMermaidSvg(source, n, suffix);
+    const svg = dot ? renderDotSvg(source, n, suffix) : renderMermaidSvg(source, n, suffix, mermaidConfigFile(ctx.shared));
     const size = svgSize(svg);
     const label = dot ? dotLabelSize(svg) : labelPx();
     return size ? { svg, size, place: placePlate(size, label, kind, leadIn) } : { svg, size: null };
@@ -1275,19 +1427,52 @@ function editionText(html) {
     .replace(/<[^>]+>/g, '')));
 }
 
+// Every cell of every table in the edition, as its own normalised text — never the whole document
+// blended into one string. A table cell is checked against these, not against prose: a short
+// value like "Yes" or "EU" is otherwise a coin flip to find by accident somewhere else in the
+// edition (a real edition once dropped a whole row and still passed, because its cells' letters
+// happened to occur inside unrelated words). A plain table keeps its cells as `<td>`/`<th>`; a
+// definition list and a record card re-container the same cells as `<dt>`/`<dd>` pairs, a record
+// card's own first column as its `<h5 class="card-title">`, and both renderers repeat the header
+// row once as `<span>`s inside their own head block — all of it is still the source table's cells.
+function extractCells(html) {
+  const cells = [];
+  const push = (re, group) => {
+    let m;
+    while ((m = re.exec(html))) cells.push(normalise(decode(m[group].replace(/<[^>]+>/g, ''))));
+  };
+  push(/<(td|th|dt|dd)\b[^>]*>([\s\S]*?)<\/\1>/g, 2);
+  push(/<h5 class="card-title">([\s\S]*?)<\/h5>/g, 1);
+  const headBlock = /<div class="(?:deflist-head|cards-head[^"]*)">([\s\S]*?)<\/div>/g;
+  let hm;
+  while ((hm = headBlock.exec(html))) {
+    const spanRe = /<span>([\s\S]*?)<\/span>/g;
+    let sm;
+    while ((sm = spanRe.exec(hm[1]))) cells.push(normalise(decode(sm[1].replace(/<[^>]+>/g, ''))));
+  }
+  return cells;
+}
+
 function verifyEdition(sources, html) {
   const text = editionText(html);
+  const cells = extractCells(html);
   const missing = [];
   for (const { file, md } of sources) {
-    const lines = md.replace(/\r\n?/g, '\n').split('\n');
-    let fence = null;
+    const lines = splitLines(md);
+    // Fence markers, and every line of a diagram (it became a picture), are not looked for; a
+    // code sample's lines are, verbatim.
+    const skip = new Set();
+    const code = new Set();
+    for (const f of scanFences(lines)) {
+      skip.add(f.start).add(f.end);
+      for (let k = f.start + 1; k < f.end; k++) (f.engine ? skip : code).add(k);
+    }
     lines.forEach((raw, idx) => {
-      const f = raw.match(/^\s*```+\s*(\S*)\s*$/);
-      if (f) { fence = fence === null ? (f[1] || 'code') : null; return; }
-      if (FIGURE_FENCES[fence]) return;
-      if (fence === null && /^\s*<!--.*-->\s*$/.test(raw)) return;
+      if (skip.has(idx)) return;
+      const inCode = code.has(idx);
+      if (!inCode && /^\s*<!--.*-->\s*$/.test(raw)) return;
       let line = raw;
-      if (fence === null) {
+      if (!inCode) {
         line = line.replace(/^\s*#{1,6}\s+/, '').replace(/\s+#+\s*$/, '')
           .replace(/^\s*>\s?/, '')
           .replace(/^\s*([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, '');
@@ -1296,7 +1481,7 @@ function verifyEdition(sources, html) {
         if (/^\s*\|/.test(line)) {
           line.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).forEach((cell) => {
             const c = normalise(cell.replace(/\\\|/g, '|'));
-            if (c && !text.includes(c)) missing.push({ file, line: idx + 1, text: cell.trim() });
+            if (c && !cells.some((ct) => ct.includes(c))) missing.push({ file, line: idx + 1, text: cell.trim() });
           });
           return;
         }
@@ -1308,9 +1493,19 @@ function verifyEdition(sources, html) {
   return missing;
 }
 
+// The masthead date: the reader's own local calendar day, not UTC — an edition built in the
+// evening must not print tomorrow's date. `timeZone` is a seam for tests; a real build always
+// takes the system's own zone (the default when it is omitted).
+function printedDate(now = new Date(), timeZone = undefined) {
+  return now.toLocaleDateString('en-CA', timeZone ? { timeZone } : undefined);
+}
+
 // ---------------------------------------------------------------- assembly
 
 function build(opts) {
+  // Scoped to this call: a custom label cap applies for one build, not every build after it in
+  // the same process.
+  if (opts.labelCap) PAGE.labelCapPt = opts.labelCap;
   const sources = opts.inputs.map((file) => {
     if (!existsSync(file)) throw new Error(`no such file: ${file}`);
     return { file, md: readFileSync(file, 'utf8') };
@@ -1342,9 +1537,12 @@ function build(opts) {
   const quietQuotes = stats.quotes > 0 && (stats.words / stats.quotes < 400 || stats.quoteWords / Math.max(1, stats.words) > 0.2);
   if (quietQuotes) kind.pullquote = false;
 
+  const css = readFileSync(opts.css ? opts.css : DEFAULT_CSS, 'utf8');
   const ctx = {
     toc: [], figure: 1, figures: [], mermaid: opts.mermaid, warnings: [],
     needsMermaidCdn: false, diagramDirection: opts.diagramDirection || 'auto', actorHues: new Map(),
+    // One per build, shared by every document's copy of ctx: the palette and what is derived from it.
+    shared: { palette: paletteOf(css, opts.accent), hues: null, mermaidConfigFile: null },
   };
 
   const render = (d) => {
@@ -1379,8 +1577,7 @@ function build(opts) {
   const title = opts.title || sections[0].title;
   const showToc = opts.toc !== null ? opts.toc
     : kind.toc === 'auto' ? (sections.length > 1 || stats.h2 >= 6) : Boolean(kind.toc);
-  const css = readFileSync(opts.css ? opts.css : DEFAULT_CSS, 'utf8');
-  const accentRule = opts.accent ? `\n:root { --accent: ${opts.accent}; --accent-bg: ${opts.accent}1f; }\n` : '';
+  const accentRule = opts.accent ? `\n:root { --accent: ${opts.accent}; --accent-bg: ${opts.accent}${ACCENT_BG_ALPHA}; }\n` : '';
 
   // The folio. A @page margin box cannot read the document, and the builder is the only place
   // that knows this edition's title, so it is written out literally here.
@@ -1396,7 +1593,7 @@ function build(opts) {
   // and top, 0.45in below for the folio.
   const pageSize = landscape ? '\n@media print { @page { size: letter landscape; margin: 0.4in 0.4in 0.45in; } }\n' : '';
 
-  const date = new Date().toISOString().slice(0, 10);
+  const date = printedDate();
   const bodyClass = [
     `kind-${kindName}`,
     kind.serif ? 'serif-body' : 'sans-body',
@@ -1465,32 +1662,55 @@ ${mermaidScript}
 }
 
 // ---------------------------------------------------------------- main
+//
+// Guarded so the module can be imported — by a test, or anything else that wants its functions —
+// without shelling out a build as a side effect of the import.
 
-try {
-  const opts = parseArgs(process.argv.slice(2));
-  const { html, kindName, kind, landscape, stats, ctx, sources } = build(opts);
-  const outDir = path.dirname(path.resolve(opts.out));
-  if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-  writeFileSync(opts.out, html, 'utf8');
-  const kb = (Buffer.byteLength(html, 'utf8') / 1024).toFixed(0);
-  console.log(`wrote ${opts.out} (${kb} KB, ${opts.inputs.length} document(s))`);
-  console.log(`kind: ${kindName}${opts.kind ? ' (forced)' : ''} — ${stats.words} words, ${stats.h2} sections, ${stats.figures} figures, widest table ${stats.maxCols} cols; ` +
-    `${kind.columns ? 'two columns' : 'single column'}, ${kind.serif ? 'serif' : 'sans'} body${landscape ? ', landscape' : ''}`);
-  for (const f of ctx.figures) {
-    console.log(`figure ${f.n}: ${f.cls.replace('diagram', '').trim() || 'column'} ${f.wIn.toFixed(1)}x${f.hIn.toFixed(1)}in (native ${Math.round(f.native.w)}x${Math.round(f.native.h)}${f.flipped ? ', direction flipped' : ''}), labels ${f.labelPt.toFixed(1)}pt`);
-  }
-  if (opts.verify) {
-    const missing = verifyEdition(sources, html);
-    if (missing.length) {
-      for (const m of missing.slice(0, 25)) console.error(`build-magazine: MISSING ${path.basename(m.file)}:${m.line}: ${m.text.slice(0, 100)}`);
-      console.error(`build-magazine: fidelity check failed — ${missing.length} source line(s) or cell(s) not found in the edition`);
-      process.exit(2);
+const isMain = (() => {
+  const entry = process.argv[1];
+  return Boolean(entry) && import.meta.url === pathToFileURL(entry).href;
+})();
+
+function main() {
+  try {
+    const opts = parseArgs(process.argv.slice(2));
+    if (opts.mermaidConfigOut) {
+      const css = readFileSync(opts.css ? opts.css : DEFAULT_CSS, 'utf8');
+      writeFileSync(opts.mermaidConfigOut, JSON.stringify(mermaidConfig(paletteOf(css, opts.accent)), null, 2), 'utf8');
+      return;
     }
-    console.log('fidelity: every source line and table cell is present in the edition');
+    const { html, kindName, kind, landscape, stats, ctx, sources } = build(opts);
+    const outDir = path.dirname(path.resolve(opts.out));
+    if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
+    writeFileSync(opts.out, html, 'utf8');
+    const kb = (Buffer.byteLength(html, 'utf8') / 1024).toFixed(0);
+    console.log(`wrote ${opts.out} (${kb} KB, ${opts.inputs.length} document(s))`);
+    console.log(`kind: ${kindName}${opts.kind ? ' (forced)' : ''} — ${stats.words} words, ${stats.h2} sections, ${stats.figures} figures, widest table ${stats.maxCols} cols; ` +
+      `${kind.columns ? 'two columns' : 'single column'}, ${kind.serif ? 'serif' : 'sans'} body${landscape ? ', landscape' : ''}`);
+    for (const f of ctx.figures) {
+      console.log(`figure ${f.n}: ${f.cls.replace('diagram', '').trim() || 'column'} ${f.wIn.toFixed(1)}x${f.hIn.toFixed(1)}in (native ${Math.round(f.native.w)}x${Math.round(f.native.h)}${f.flipped ? ', direction flipped' : ''}), labels ${f.labelPt.toFixed(1)}pt`);
+    }
+    if (opts.verify) {
+      const missing = verifyEdition(sources, html);
+      if (missing.length) {
+        for (const m of missing.slice(0, 25)) console.error(`build-magazine: MISSING ${path.basename(m.file)}:${m.line}: ${m.text.slice(0, 100)}`);
+        console.error(`build-magazine: fidelity check failed — ${missing.length} source line(s) or cell(s) not found in the edition`);
+        process.exit(2);
+      }
+      console.log('fidelity: every source line and table cell is present in the edition');
+    }
+    for (const w of ctx.warnings) console.error(`build-magazine: WARNING ${w}`);
+    if (ctx.warnings.length) console.error(`build-magazine: ${ctx.warnings.length} warning(s) — review the edition before shipping it`);
+  } catch (e) {
+    console.error(`build-magazine: ${e.message}`);
+    process.exit(1);
   }
-  for (const w of ctx.warnings) console.error(`build-magazine: WARNING ${w}`);
-  if (ctx.warnings.length) console.error(`build-magazine: ${ctx.warnings.length} warning(s) — review the edition before shipping it`);
-} catch (e) {
-  console.error(`build-magazine: ${e.message}`);
-  process.exit(1);
 }
+
+if (isMain) main();
+
+export {
+  parseArgs, build, verifyEdition, editionText, extractCells, normalise, renderSub, renderList, printedDate,
+  parseBlocks, scanFences, splitLines, paletteOf, mermaidConfig, actorHues, PORTRAIT, LANDSCAPE, GEOMETRY,
+  DEFAULT_CSS, MERMAID_THEME,
+};

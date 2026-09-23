@@ -45,6 +45,41 @@ import sys
 import tempfile
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
+import importlib.util
+
+
+def _sibling(path: Path):
+    """Load a helper module by path, so this file finds its siblings however it was started
+    (as a script, or loaded by path by the publish board)."""
+    name = f"_diagram_{path.stem}"
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod
+        spec.loader.exec_module(mod)
+    return sys.modules[name]
+
+
+HERE = Path(__file__).resolve().parent
+fences = _sibling(HERE / "fences.py")        # what a diagram fence is: shared with edit, publish, magazine
+presence = _sibling(HERE / "presence.py")    # when a shortened identifier is still present: shared with edit
+# The magazine target is measured the way the magazine prints: its page geometry and its mermaid
+# config both come from the magazine skill, installed beside this one.
+MAGAZINE_DIR = HERE.parents[1] / "magazine"
+MAGAZINE_GEOMETRY = MAGAZINE_DIR / "assets" / "geometry.json"
+MAGAZINE_BUILD = MAGAZINE_DIR / "scripts" / "build-magazine.mjs"
+
+
+def _magazine_measure_in() -> float | None:
+    """The full measure of a portrait magazine page, from the magazine's own geometry; None when
+    the magazine skill is not installed (the magazine target then refuses to run)."""
+    try:
+        g = json.loads(MAGAZINE_GEOMETRY.read_text(encoding="utf-8"))
+        p = g["portrait"]
+        return p["pageIn"]["width"] - 2 * p["marginIn"]["side"]
+    except (OSError, KeyError, ValueError):
+        return None
+
 
 # Target widths in inches. These are not measurements of any surface: 6.5in is the floor Edward
 # chose (2026-09-19) as the strictest realistic width — a wiki column, a printed page inside its
@@ -54,21 +89,19 @@ from pathlib import Path
 TARGETS = {
     "md": 6.5,         # the chosen floor; a README is not assumed wider than a wiki page
     "ado": 6.5,        # the chosen floor, not an observed ADO column width
-    "magazine": 7.5,   # a full-measure plate in the printed edition (the builder's own measure)
+    "magazine": _magazine_measure_in(),   # a full-measure plate in the printed edition
 }
 LABEL_FLOOR_PT = 7.0       # below this, a printed label is not read, it is guessed at
 LABEL_TARGET_PT = 8.0      # what to aim for, so the floor is not the design
 MAX_LABEL_WORDS = 3        # Edward's rule: three words, one preferred
 NOTE_MAX_WORDS = 20        # a note or a title is prose by design; past this it is a paragraph
-NODE_BUDGET = 12           # past this an overview should split (IME contract: 5-10)
+NODE_BUDGET = 12           # past this an overview should split (a comfortable range is 5-10)
 DEFAULT_FONT_PX = 16.0     # mermaid's default; graphviz's is 14
 CHAR_WIDTH_EM = 0.55       # average glyph width in a UI sans, for widths the SVG does not give
 
 # Directories that hold diagrams written to fail a validator. Skipped unless asked for.
 FIXTURE_DIRS = {"fixture", "fixtures", "__fixtures__", "testdata", "__snapshots__", "node_modules", ".git"}
 
-MERMAID_FENCE = re.compile(r"^[ \t]*(?:```+|:::)\s*mermaid\s*$", re.I)
-FENCE_END = re.compile(r"^[ \t]*(?:```+|:::)\s*$")
 HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
 INIT_DIRECTIVE = re.compile(r"%%\{\s*init\s*:", re.I)
 # An id may carry dots and hyphens inside (a.b, first-step) but never swallow an arrow: `A-->B`
@@ -152,8 +185,9 @@ class DiagramReport:
 def extract_diagrams(path: Path) -> list[tuple[int, str, bool]]:
     """Return (index, source, was_fenced) for every diagram in a file.
 
-    A .mmd holds exactly one diagram and is raw source (IME's contract). A .md may hold
-    several, in ``` or ::: fences — Azure DevOps uses the latter. A .dot/.gv is Graphviz.
+    A .mmd holds exactly one diagram and is raw source (the repo convention this tool assumes). A .md may hold
+    several, in any diagram fence fences.json defines (``` ~~~ or Azure DevOps's :::, mermaid or
+    Graphviz). A .dot/.gv is Graphviz.
     """
     text = path.read_text(encoding="utf-8", errors="replace")
     if path.suffix.lower() in (".mmd", ".mermaid"):
@@ -164,28 +198,19 @@ def extract_diagrams(path: Path) -> list[tuple[int, str, bool]]:
             body_lines.pop(0)
         while body_lines and not body_lines[-1].strip():
             body_lines.pop()
-        if body_lines and MERMAID_FENCE.match(body_lines[0]):
+        o = fences.opener(body_lines[0]) if body_lines else None
+        if o and o[1].lower() in fences.DIAGRAM_LANGS:
             fenced = True
             body_lines.pop(0)
-            if body_lines and FENCE_END.match(body_lines[-1]):
+            if body_lines and fences.is_closer(body_lines[-1], o[0]):
                 body_lines.pop()
         return [(0, "\n".join(body_lines), fenced)]
     if path.suffix.lower() in (".dot", ".gv"):
         return [(0, text, False)]
 
-    out: list[tuple[int, str, bool]] = []
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines):
-        if MERMAID_FENCE.match(lines[i]):
-            buf: list[str] = []
-            i += 1
-            while i < len(lines) and not FENCE_END.match(lines[i]):
-                buf.append(lines[i])
-                i += 1
-            out.append((len(out), "\n".join(buf), False))
-        i += 1
-    return out
+    lines = fences.split_lines(text)
+    found = [f for f in fences.scan(text) if f.diagram]
+    return [(n, "\n".join(lines[f.start + 1:f.end]), False) for n, f in enumerate(found)]
 
 
 def strip_comments(src: str) -> str:
@@ -237,7 +262,7 @@ def svg_lines(inner: str) -> list[str]:
 
 
 def strip_markup(label: str) -> str:
-    # a tag starts with a lower-case letter (br, b, tspan, div…); `Create<IImeApiClient>()` is a
+    # a tag starts with a lower-case letter (br, b, tspan, div…); `Create<IApiClient>()` is a
     # generic type argument, not markup, and stays
     s = re.sub(r"<br\s*/?>|<tspan\b[^>]*>", " ", label, flags=re.I)
     s = re.sub(r"</?[a-z][a-z0-9]*(?:\s[^>]*)?/?>", "", s)
@@ -379,12 +404,20 @@ def parse_pie(body: str) -> Graph:
     return g
 
 
+def _masked_lines(body: str) -> tuple[list[str], list[str]]:
+    """Shared first step of every bracketed-block parser (state, class, er): mask quoted
+    strings so a brace or keyword inside a label never confuses the walk, then hand back each
+    line already stripped. Blank lines are dropped here since all three parsers skip them the
+    same way — one `continue` on an empty line, wherever it falls in their own checks."""
+    masked, store = mask_quotes(body)
+    return store, [ln.strip() for ln in masked.splitlines() if ln.strip()]
+
+
 def parse_state(body: str) -> Graph:
     g = Graph("state", True)
-    masked, store = mask_quotes(body)
+    store, lines = _masked_lines(body)
     in_note = False
-    for ln in masked.splitlines():
-        s = ln.strip()
+    for s in lines:
         if in_note:
             if re.match(r"end\s+note\b", s):
                 in_note = False
@@ -460,10 +493,9 @@ CLASS_REL = re.compile(
 
 def parse_class(body: str) -> Graph:
     g = Graph("class", True)
-    masked, store = mask_quotes(body)
+    store, lines = _masked_lines(body)
     current = None
-    for ln in masked.splitlines():
-        s = ln.strip()
+    for s in lines:
         n = re.match(r"note(?:\s+for\s+\S+)?\s+(\x00\d+\x00)", s)
         if n:
             g.notes.append(strip_markup(unmask(n.group(1), store)).replace("\\n", " "))
@@ -505,11 +537,10 @@ ER_REL = re.compile(
 
 def parse_er(body: str) -> Graph:
     g = Graph("er", True)
-    masked, store = mask_quotes(body)
+    store, lines = _masked_lines(body)
     current = None
-    for ln in masked.splitlines():
-        s = ln.strip()
-        if not s or s.startswith("erDiagram"):
+    for s in lines:
+        if s.startswith("erDiagram"):
             continue
         if s == "}":
             current = None
@@ -653,8 +684,36 @@ def _tool(name: str) -> str | None:
     return shutil.which(name) or shutil.which(name + ".cmd")
 
 
-def render_svg(src: str, kind: str, workdir: Path, stem: str) -> tuple[Path | None, str]:
-    """Render to SVG; return (path or None, the renderer's complaint when it failed)."""
+_magazine_config: tuple[Path, dict] | None = None
+
+
+def magazine_mermaid_config(workdir: Path) -> tuple[Path | None, dict, str]:
+    """(config file, config, complaint): the mermaid config the magazine renders with — its
+    theme's spacing and fonts, its palette resolved — written by the builder itself, so a label
+    measured here for the magazine is the label the magazine prints."""
+    global _magazine_config
+    if _magazine_config and _magazine_config[0].exists():
+        return _magazine_config[0], _magazine_config[1], ""
+    node = _tool("node")
+    if not node or not MAGAZINE_BUILD.exists():
+        return None, {}, f"the magazine target needs node and {MAGAZINE_BUILD}"
+    out = workdir / "magazine-mermaid-config.json"
+    try:
+        r = subprocess.run([node, str(MAGAZINE_BUILD), "--mermaid-config", str(out)],
+                           capture_output=True, text=True, timeout=60)
+        if r.returncode != 0 or not out.exists():
+            return None, {}, f"the magazine builder could not write its mermaid config: {(r.stderr or r.stdout).strip()[:200]}"
+        cfg = json.loads(out.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return None, {}, f"the magazine builder could not write its mermaid config: {str(exc)[:200]}"
+    _magazine_config = (out, cfg)
+    return out, cfg, ""
+
+
+def render_svg(src: str, kind: str, workdir: Path, stem: str,
+               config: Path | None = None) -> tuple[Path | None, str]:
+    """Render to SVG; return (path or None, the renderer's complaint when it failed). A mermaid
+    `config` file is passed to mmdc as-is."""
     if kind == "graphviz":
         dot = _tool("dot") or r"C:\Program Files\Graphviz\bin\dot.exe"
         if not Path(dot).exists() and not shutil.which("dot"):
@@ -674,7 +733,8 @@ def render_svg(src: str, kind: str, workdir: Path, stem: str) -> tuple[Path | No
     out = workdir / f"{stem}.svg"
     src_file.write_text(src, encoding="utf-8")
     try:
-        r = subprocess.run([mmdc, "-i", str(src_file), "-o", str(out), "-b", "transparent"],
+        config_args = ["-c", str(config)] if config else []
+        r = subprocess.run([mmdc, "-i", str(src_file), "-o", str(out), "-b", "transparent", *config_args],
                            capture_output=True, text=True, timeout=180, shell=(os.name == "nt"))
         if out.exists() and r.returncode == 0:
             return out, ""
@@ -807,8 +867,8 @@ LAYOUT_CHAR_EM = 0.42      # a true lower bound on average glyph width (identifi
 LAYOUT_SLACK_PX = 4.0      # ignore crossings and overflows smaller than this
 MESSAGE_ROW_PX = 45.0     # a sequence message's text sits ~29px above its arrow; 45 leaves slack
 PAGE_HEIGHT_PX = 864       # 9in at 96dpi: a printed page inside its margins, about one screen
-SEQ_ACTOR_W = 150          # mermaid's default actor box width
-SEQ_ACTOR_MARGIN = 50      # mermaid's default gap between actor boxes
+SEQ_ACTOR_W = 150          # mermaid's default actor box width (a render config may override it)
+SEQ_ACTOR_MARGIN = 50      # mermaid's default gap between actor boxes (the magazine's config sets its own)
 SEQ_MARGIN = 100           # the 50px the renderer leaves either side of the diagram
 
 
@@ -817,75 +877,98 @@ def _attr(attrs: str, name: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _layout_default_font(svg: str, kind: str) -> float:
+    """The base font size a layout check falls back to when a run gives none of its own."""
+    default = DEFAULT_FONT_PX if kind != "graphviz" else 14.0
+    m = re.search(r"<style>[^<]*?font-size\s*:\s*([\d.]+)px", svg)
+    return float(m.group(1)) if m else default
+
+
 def layout_defects(svg: str, kind: str) -> list[str]:
     """Text a lifeline runs through, and text that leaves a fixed box. Positions come from the
     SVG geometry exactly; glyph widths are estimated low, so a finding is a defect a reader
     would see and a clean result is not a guarantee. Mermaid sizes every box it draws — nodes,
     actors, notes — to the text, so overflow there is structurally impossible and is not
-    claimed; it is checked where a box can be fixed: Graphviz nodes (fixedsize, width)."""
+    claimed; it is checked where a box can be fixed: Graphviz nodes (fixedsize, width).
+
+    Two unrelated checks live behind this one entry point because a caller only ever wants
+    "does this diagram have a layout defect", never one algorithm by name; each kind runs at
+    most one of them."""
+    default = _layout_default_font(svg, kind)
+    if kind == "sequence":
+        return _layout_defects_sequence(svg, default)
+    if kind == "graphviz":
+        return _layout_defects_graphviz(svg, default)
+    return []
+
+
+def _layout_defects_sequence(svg: str, default: float) -> list[str]:
+    """A message's text against every actor lifeline and its own arrow: struck-through,
+    spanning a lifeline it does not touch, or centred on the sender's own line."""
     out: list[str] = []
-    default = DEFAULT_FONT_PX if kind != "graphviz" else 14.0
-    m = re.search(r"<style>[^<]*?font-size\s*:\s*([\d.]+)px", svg)
-    if m:
-        default = float(m.group(1))
 
     def est(text: str, px: float) -> float:
         return len(text) * px * LAYOUT_CHAR_EM
 
-    if kind == "sequence":
-        lifelines = sorted(float(_attr(a, "x1") or 0) for a in re.findall(r"<line\b([^>]*)>", svg) if "actor-line" in a)
-        # every message's arrow: a <line x1 x2 y1> between two actors, or a <path d="M x,y C…">
-        # loop back to the same actor. The text sits a fixed distance above its own arrow, so the
-        # arrow is found by row: the nearest one below the text whose span covers the text's x.
-        # (Matching on the midpoint failed: the arrowhead shortens the line, the text lands a few
-        # px off centre, and without the row a neighbouring arrow could be taken for this one.)
-        arrows: list[tuple[float, float, bool, float]] = []
-        for tag, attrs in re.findall(r"<(line|path)\b([^>]*)>", svg):
-            if "messageLine" not in (_attr(attrs, "class") or ""):
-                continue
-            if tag == "line":
-                arrows.append((float(_attr(attrs, "x1") or 0), float(_attr(attrs, "x2") or 0), False,
-                               float(_attr(attrs, "y1") or 0)))
-            else:
-                mm = re.match(r"\s*M\s*([\d.\-]+)[ ,]+([\d.\-]+)", _attr(attrs, "d") or "")
-                if mm:
-                    arrows.append((float(mm.group(1)), float(mm.group(1)), True, float(mm.group(2))))
-        for attrs, inner in re.findall(r"<text\b([^>]*)>(.*?)</text>", svg, re.S):
-            cls, text = _attr(attrs, "class") or "", strip_markup(inner)
-            if not text or "messageText" not in cls:
-                continue
-            x = float(_attr(attrs, "x") or 0)
-            px = _font_px(attrs + inner, default)
-            w = est(text, px)
-            lo, hi = x - w / 2, x + w / 2
-            y = float(_attr(attrs, "y") or 0)
-            below = [a for a in arrows if y < a[3] <= y + MESSAGE_ROW_PX
-                     and min(a[0], a[1]) - 8 <= x <= max(a[0], a[1]) + 8]
-            arrow = min(below, key=lambda a: a[3] - y) if below else None
-            if arrow and arrow[2]:
-                # a self-message: mermaid centres the text on the actor's own lifeline, so the
-                # line runs through it at any length — a warning, with the way out
-                out.append(f"self-message-struck: \"{text[:60]}\" sits on its own lifeline, which mermaid draws "
-                           f"through the text at any length; a `Note right of` beside the loop reads cleanly")
-                continue
-            span = (min(arrow[0], arrow[1]), max(arrow[0], arrow[1])) if arrow else (x, x)
-            between = [lx for lx in lifelines if span[0] + 1 < lx < span[1] - 1]
-            if between:
-                # certain, no estimate involved: the text is centred on a lifeline it does not touch.
-                # Structural, like the self-message: only participant order or messageAlign changes it
-                out.append(f"spanning-struck: message \"{text[:60]}\" spans {len(between) + 1} gaps and is centred on "
-                           f"the lifeline between, which runs through the text; put the participants that talk "
-                           f"side by side, or set sequence.messageAlign to left where the surface allows a directive")
-                continue
-            crossed = [lx for lx in lifelines if lo + LAYOUT_SLACK_PX < lx < hi - LAYOUT_SLACK_PX]
-            if crossed:
-                out.append(f"struck-through: message \"{text[:60]}\" is wider than the gap it sits in; "
-                           f"{len(crossed)} lifeline(s) run through the text")
-        return out
-    if kind != "graphviz":
-        return out
+    lifelines = sorted(float(_attr(a, "x1") or 0) for a in re.findall(r"<line\b([^>]*)>", svg) if "actor-line" in a)
+    # every message's arrow: a <line x1 x2 y1> between two actors, or a <path d="M x,y C…">
+    # loop back to the same actor. The text sits a fixed distance above its own arrow, so the
+    # arrow is found by row: the nearest one below the text whose span covers the text's x.
+    # (Matching on the midpoint failed: the arrowhead shortens the line, the text lands a few
+    # px off centre, and without the row a neighbouring arrow could be taken for this one.)
+    arrows: list[tuple[float, float, bool, float]] = []
+    for tag, attrs in re.findall(r"<(line|path)\b([^>]*)>", svg):
+        if "messageLine" not in (_attr(attrs, "class") or ""):
+            continue
+        if tag == "line":
+            arrows.append((float(_attr(attrs, "x1") or 0), float(_attr(attrs, "x2") or 0), False,
+                           float(_attr(attrs, "y1") or 0)))
+        else:
+            mm = re.match(r"\s*M\s*([\d.\-]+)[ ,]+([\d.\-]+)", _attr(attrs, "d") or "")
+            if mm:
+                arrows.append((float(mm.group(1)), float(mm.group(1)), True, float(mm.group(2))))
+    for attrs, inner in re.findall(r"<text\b([^>]*)>(.*?)</text>", svg, re.S):
+        cls, text = _attr(attrs, "class") or "", strip_markup(inner)
+        if not text or "messageText" not in cls:
+            continue
+        x = float(_attr(attrs, "x") or 0)
+        px = _font_px(attrs + inner, default)
+        w = est(text, px)
+        lo, hi = x - w / 2, x + w / 2
+        y = float(_attr(attrs, "y") or 0)
+        below = [a for a in arrows if y < a[3] <= y + MESSAGE_ROW_PX
+                 and min(a[0], a[1]) - 8 <= x <= max(a[0], a[1]) + 8]
+        arrow = min(below, key=lambda a: a[3] - y) if below else None
+        if arrow and arrow[2]:
+            # a self-message: mermaid centres the text on the actor's own lifeline, so the
+            # line runs through it at any length — a warning, with the way out
+            out.append(f"self-message-struck: \"{text[:60]}\" sits on its own lifeline, which mermaid draws "
+                       f"through the text at any length; a `Note right of` beside the loop reads cleanly")
+            continue
+        span = (min(arrow[0], arrow[1]), max(arrow[0], arrow[1])) if arrow else (x, x)
+        between = [lx for lx in lifelines if span[0] + 1 < lx < span[1] - 1]
+        if between:
+            # certain, no estimate involved: the text is centred on a lifeline it does not touch.
+            # Structural, like the self-message: only participant order or messageAlign changes it
+            out.append(f"spanning-struck: message \"{text[:60]}\" spans {len(between) + 1} gaps and is centred on "
+                       f"the lifeline between, which runs through the text; put the participants that talk "
+                       f"side by side, or set sequence.messageAlign to left where the surface allows a directive")
+            continue
+        crossed = [lx for lx in lifelines if lo + LAYOUT_SLACK_PX < lx < hi - LAYOUT_SLACK_PX]
+        if crossed:
+            out.append(f"struck-through: message \"{text[:60]}\" is wider than the gap it sits in; "
+                       f"{len(crossed)} lifeline(s) run through the text")
+    return out
 
-    # every other kind: inside a node group, the widest text against the widest shape
+
+def _layout_defects_graphviz(svg: str, default: float) -> list[str]:
+    """Inside each node group, the widest text against the widest shape: a fixed-size Graphviz
+    box the label does not fit in."""
+    out: list[str] = []
+
+    def est(text: str, px: float) -> float:
+        return len(text) * px * LAYOUT_CHAR_EM
+
     token = re.compile(r"<g\b([^>]*)>|</g>|<rect\b([^>]*)/?>|<polygon\b([^>]*)/?>|<ellipse\b([^>]*)/?>|<text\b([^>]*)>(.*?)</text>|<foreignObject\b([^>]*)>(.*?)</foreignObject>", re.S)
     stack: list[dict | None] = []
     for tok in token.finditer(svg):
@@ -930,43 +1013,60 @@ def layout_defects(svg: str, kind: str) -> list[str]:
 
 # ----------------------------------------------------------------- judgement
 
-def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None:
-    # --- mechanical: will it render where it has to live
-    if target == "ado":
-        bad = sorted({hx for hx in HEX_COLOR.findall(src) if not re.search(r"[A-Fa-f]", hx[1:])})
-        if bad:
-            rep.add("blocker", "ado-hex",
-                    f"{', '.join(bad)} digit-only; Azure DevOps substitutes #<digits> as a "
-                    f"work-item mention inside mermaid and corrupts the diagram")
-        if INIT_DIRECTIVE.search(src):
-            rep.add("nit", "ado-init",
-                    "%%{init}%% is rejected by ADO's mermaid; fine if an embed pipeline "
-                    "strips it (IME's does), otherwise move styling to classDef")
-    im = INIT_DIRECTIVE.search(src)
-    if im:
-        close = src.find("}%%", im.start())
-        if close < 0:
-            rep.add("blocker", "init-unterminated", "a %%{init} directive with no closing }%% — whatever the renderer makes of it is not what was meant")
-        elif "\n" in src[im.start(): close + 3]:
-            rep.add("warning", "init-multiline", "a %%{init}%% directive spanning lines is a parse error in mermaid")
+def _check_target_mechanics(rep: DiagramReport, src: str, target: str) -> None:
+    """Will it render where it has to live: ADO-specific breakage only."""
+    if target != "ado":
+        return
+    bad = sorted({hx for hx in HEX_COLOR.findall(src) if not re.search(r"[A-Fa-f]", hx[1:])})
+    if bad:
+        rep.add("blocker", "ado-hex",
+                f"{', '.join(bad)} digit-only; Azure DevOps substitutes #<digits> as a "
+                f"work-item mention inside mermaid and corrupts the diagram")
+    if INIT_DIRECTIVE.search(src):
+        rep.add("nit", "ado-init",
+                "%%{init}%% is rejected by ADO's mermaid; fine if an embed pipeline "
+                "strips it before publishing, otherwise move styling to classDef")
 
+
+def _check_init_directive(rep: DiagramReport, src: str) -> None:
+    """A %%{init}%% directive that mermaid itself cannot parse, regardless of target."""
+    im = INIT_DIRECTIVE.search(src)
+    if not im:
+        return
+    close = src.find("}%%", im.start())
+    if close < 0:
+        rep.add("blocker", "init-unterminated", "a %%{init} directive with no closing }%% — whatever the renderer makes of it is not what was meant")
+    elif "\n" in src[im.start(): close + 3]:
+        rep.add("warning", "init-multiline", "a %%{init}%% directive spanning lines is a parse error in mermaid")
+
+
+def _check_parse_status(rep: DiagramReport) -> None:
     if not rep.parsed:
         rep.add("warning", "unparsed",
                 f"the tool does not extract entities from a {rep.kind} diagram; node and edge "
                 f"counts are not available and a redraw cannot be verified by diff — verify by eye")
 
+
+def _check_render_status(rep: DiagramReport, render_error: str) -> bool:
+    """False means the caller must stop: nothing past this point can be measured."""
     if not rep.rendered:
         rep.add("blocker", "no-render", f"the diagram does not render{': ' + render_error if render_error else ''}")
-        return
+        return False
+    return True
 
-    # --- the gate fails closed: a render that could not be measured is refused, not passed
+
+def _check_measure_status(rep: DiagramReport) -> bool:
+    """The gate fails closed: a render that could not be measured is refused, not passed."""
     if rep.measure_error:
         rep.add("blocker", "unmeasured",
                 f"rendered, but legibility could not be measured: {rep.measure_error} — no verdict; "
                 f"measure by eye or fix the renderer before trusting this diagram")
-        return
+        return False
+    return True
 
-    # --- legibility, the thing that costs him manual labour
+
+def _check_legibility(rep: DiagramReport, target: str) -> None:
+    """Legibility, the thing that costs him manual labour."""
     if rep.label_pt_at_target < LABEL_FLOOR_PT:
         rep.add("blocker", "illegible",
                 f"labels print at {rep.label_pt_at_target:.1f}pt at {TARGETS[target]}in "
@@ -975,7 +1075,9 @@ def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None
         rep.add("warning", "tight",
                 f"labels print at {rep.label_pt_at_target:.1f}pt; target is {LABEL_TARGET_PT}pt")
 
-    # --- the real constraint, said up front: geometry no label can change
+
+def _check_structural_floor(rep: DiagramReport, target: str) -> None:
+    """The real constraint, said up front: geometry no label can change."""
     if rep.structural_reason and rep.structural_pt < LABEL_FLOOR_PT:
         rep.add("blocker", "needs-author",
                 f"{rep.structural_reason} fix a minimum width before any label is written: at {TARGETS[target]}in "
@@ -986,7 +1088,9 @@ def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None
                 f"{rep.nodes} nodes and illegible: split first, labels second — past ~{NODE_BUDGET} nodes "
                 f"shortening labels does not bring a diagram back over the floor")
 
-    # --- height: five screens of diagram is not read either
+
+def _check_height(rep: DiagramReport, target: str) -> None:
+    """Height: five screens of diagram is not read either."""
     if rep.height_at_target_px > 3 * PAGE_HEIGHT_PX:
         rep.add("blocker", "tall",
                 f"{rep.height_at_target_px:.0f}px tall at {TARGETS[target]}in wide, {rep.height_at_target_px / PAGE_HEIGHT_PX:.1f} "
@@ -996,13 +1100,17 @@ def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None
                 f"{rep.height_at_target_px:.0f}px tall at {TARGETS[target]}in wide, {rep.height_at_target_px / PAGE_HEIGHT_PX:.1f} "
                 f"pages of {PAGE_HEIGHT_PX}px; a reader sees it in pieces")
 
-    # --- what a reader notices in the first two seconds
+
+def _check_layout_defect_findings(rep: DiagramReport) -> None:
+    """What a reader notices in the first two seconds."""
     for defect in rep.layout_defects:
         code = defect.split(":")[0]
         rep.add("warning" if code in ("self-message-struck", "spanning-struck") else "blocker", code,
                 defect.split(": ", 1)[1] if ": " in defect else defect)
 
-    # --- when the label rule has nothing left to give, say so: shorter labels will not fix it
+
+def _check_width_exhausted(rep: DiagramReport) -> None:
+    """When the label rule has nothing left to give, say so: shorter labels will not fix it."""
     d = rep.width_driver
     already = any(f.code == "needs-author" for f in rep.findings)
     if rep.label_pt_at_target < LABEL_FLOOR_PT and d and not already:
@@ -1015,19 +1123,26 @@ def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None
                     f"illegible with every label already within {MAX_LABEL_WORDS} words: the label rule cannot help; "
                     f"this needs a split{', a change of type' if rep.parsed and rep.nodes > NODE_BUDGET else ''} or the author's decision")
 
-    # --- what drives the width: the fix has to aim at this, not at node labels by reflex
+
+def _check_width_driver_nit(rep: DiagramReport) -> None:
+    """What drives the width: the fix has to aim at this, not at node labels by reflex."""
+    d = rep.width_driver
     if d and rep.label_pt_at_target < LABEL_TARGET_PT:
         rep.add("nit", "width-driver",
                 f"the widest text is a {d['role']} label of {d['words']} words "
                 f"({'measured' if d['measured'] else 'estimated'} {d['width_px']:.0f}px): "
                 f"\"{d['text'][:80]}\" — shorten that, not the font")
 
-    # --- a note is prose by design, but a paragraph in a note belongs in the document
+
+def _check_long_notes(rep: DiagramReport) -> None:
+    """A note is prose by design, but a paragraph in a note belongs in the document."""
     if rep.long_notes:
         rep.add("warning", "long-note",
                 f"{len(rep.long_notes)} note(s) over {NOTE_MAX_WORDS} words; a note is a caption, a paragraph goes in the prose")
 
-    # --- label bloat, which is the usual CAUSE of the above
+
+def _check_label_bloat(rep: DiagramReport) -> None:
+    """Label bloat, which is the usual cause of illegibility above."""
     if rep.max_label_words > MAX_LABEL_WORDS and rep.kind != "pie":   # a pie's labels are a legend list; they widen nothing
         rep.add("warning", "verbose-labels",
                 f"{len(rep.long_labels)} node label(s) over {MAX_LABEL_WORDS} words "
@@ -1038,7 +1153,9 @@ def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None
                 f"{len(rep.long_edge_labels)} edge/message label(s) over {MAX_LABEL_WORDS} words "
                 f"(longest {rep.max_edge_words}); an edge carries a verb, not a sentence")
 
-    # --- size and type fit, only where the graph was actually read
+
+def _check_size_and_type_fit(rep: DiagramReport) -> None:
+    """Size and type fit, only where the graph was actually read."""
     if rep.parsed and rep.nodes > NODE_BUDGET:
         rep.add("warning", "oversized",
                 f"{rep.nodes} nodes; past ~{NODE_BUDGET} an overview should split into "
@@ -1053,6 +1170,28 @@ def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None
             rep.add("nit", "direction",
                     f"{rep.nodes} nodes left-to-right will be wide and shrink; top-down is "
                     f"usually taller and more legible — unless the nodes come in pairs")
+
+
+def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None:
+    """Run every finding rule for one diagram, in the order a reader would hit the problems:
+    can it render where it lives, can it even be measured, then legibility, size and type fit.
+    Each rule is its own small function; this is just their call order."""
+    _check_target_mechanics(rep, src, target)
+    _check_init_directive(rep, src)
+    _check_parse_status(rep)
+    if not _check_render_status(rep, render_error):
+        return
+    if not _check_measure_status(rep):
+        return
+    _check_legibility(rep, target)
+    _check_structural_floor(rep, target)
+    _check_height(rep, target)
+    _check_layout_defect_findings(rep)
+    _check_width_exhausted(rep)
+    _check_width_driver_nit(rep)
+    _check_long_notes(rep)
+    _check_label_bloat(rep)
+    _check_size_and_type_fit(rep)
 
 
 def _ranks(g: Graph) -> dict[str, int]:
@@ -1081,8 +1220,26 @@ def _ranks(g: Graph) -> dict[str, int]:
     return rank
 
 
+def _sequence_geometry(config: dict) -> tuple[float, float, float]:
+    """(actor width, actor gap, font px) a sequence diagram is drawn with under `config`;
+    mermaid's defaults when the config leaves them unset."""
+    seq = config.get("sequence", {})
+    font = str(config.get("themeVariables", {}).get("fontSize", DEFAULT_FONT_PX)).removesuffix("px")
+    try:
+        font_px = float(font)
+    except ValueError:
+        font_px = DEFAULT_FONT_PX
+    return float(seq.get("width", SEQ_ACTOR_W)), float(seq.get("actorMargin", SEQ_ACTOR_MARGIN)), font_px
+
+
 def analyse(path: Path, target: str, workdir: Path) -> list[DiagramReport]:
     reports: list[DiagramReport] = []
+    config_file, config, config_error = None, {}, ""
+    if target == "magazine":
+        if TARGETS["magazine"] is None:
+            raise SystemExit(f"audit.py: the magazine target needs the magazine skill beside this one ({MAGAZINE_GEOMETRY} is missing)")
+        config_file, config, config_error = magazine_mermaid_config(workdir)
+    actor_w, actor_gap, font_px = _sequence_geometry(config)
     for index, src, fenced in extract_diagrams(path):
         if not src.strip():
             continue
@@ -1114,12 +1271,15 @@ def analyse(path: Path, target: str, workdir: Path) -> list[DiagramReport]:
         # geometry the labels cannot change: n sequence participants are n fixed boxes and gaps
         if g.parsed and rep.kind == "sequence" and len(g.nodes) >= 2 and not re.search(r"actorMargin|\"width\"|'width'|\bwrap\b", src):
             n = len(g.nodes)
-            min_w = n * SEQ_ACTOR_W + (n - 1) * SEQ_ACTOR_MARGIN + SEQ_MARGIN
-            rep.structural_pt = DEFAULT_FONT_PX * 0.75 * min(1.0, (TARGETS[target] * 96.0) / min_w)
-            rep.structural_reason = f"{n} participants ({SEQ_ACTOR_W}px boxes, {SEQ_ACTOR_MARGIN}px gaps: {min_w}px)"
+            min_w = round(n * actor_w + (n - 1) * actor_gap + SEQ_MARGIN)
+            rep.structural_pt = font_px * 0.75 * min(1.0, (TARGETS[target] * 96.0) / min_w)
+            rep.structural_reason = f"{n} participants ({actor_w:g}px boxes, {actor_gap:g}px gaps: {min_w}px)"
 
         stem = f"{path.stem}-{index}"[:60].replace(" ", "_")
-        svg, err = render_svg(src, rep.kind, workdir, stem)
+        if config_error and rep.kind != "graphviz":
+            svg, err = None, config_error      # fail closed: never measure the magazine with another config
+        else:
+            svg, err = render_svg(src, rep.kind, workdir, stem, config_file)
         if svg:
             rep.rendered = True
             rep.native_w, rep.native_h, runs, rep.layout_defects = measure_svg(svg, rep.kind, TARGETS[target])
@@ -1347,7 +1507,9 @@ def is_detail(t: str) -> bool:
 
 
 def _detail_tokens(s: str) -> set[str]:
-    return {t.lower() for t in _raw_tokens(s) if is_detail(t)}
+    """Detail tokens as written: case matters to the shared presence rule (a lower-case receiver
+    may be dropped, a type qualifier may not); token_present compares case-blind."""
+    return {t for t in _raw_tokens(s) if is_detail(t)}
 
 
 def is_sample_value(t: str) -> bool:
@@ -1379,21 +1541,19 @@ def _path_present(old: str, text: str) -> bool:
 
 
 def token_present(t: str, toks: set[str], text: str) -> bool:
-    """Is the detail token `t` (lower-case; a trailing * marks an ellipsis-cut prefix) present in
-    a piece of text, given its token set? Whole-token first; then a path by segments; then a
-    prefix; then an alias written as words (InternalAPI as Internal API)."""
+    """Is the detail token `t` (as written; a trailing * marks an ellipsis-cut prefix) present in
+    a piece of text, given its lower-case token set? Whole-token first; then a path by segments;
+    then a prefix; then a dotted identifier by the shared presence rule; then an alias written as
+    words (InternalAPI as Internal API)."""
+    written, t = t, t.lower()
     if t.endswith("*"):
         return any(x.startswith(t[:-1]) for x in toks)
     if t in toks:
         return True
     if "/" in t and _path_present(t, text):
         return True
-    # `woDetail.Installer_ID` is kept by `Installer_ID`: the member is the fact, the receiver
-    # is the route to it
-    if "." in t:
-        last = t.rsplit(".", 1)[-1]
-        if last in toks and (is_detail(last) or len(last) >= 5):
-            return True
+    if presence.member_present(written, text):
+        return True
     if len(t) >= 5 and not any(c.isdigit() for c in t) and "/" not in t:
         return _flat(t) in _flat(text)
     return False
@@ -1406,9 +1566,12 @@ def visible_text(path: Path, near_figures: bool = True) -> str:
     False). Nothing for a .mmd/.gv: a %% comment is invisible in every render."""
     if path.suffix.lower() not in (".md", ".markdown", ".txt"):
         return ""
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = fences.split_lines(text)
     heading = re.compile(r"^(#{1,6})\s")
-    fence_at = [i for i, ln in enumerate(lines) if MERMAID_FENCE.match(ln)]
+    diagrams = [f for f in fences.scan(text) if f.diagram]
+    inside = {i for f in diagrams for i in range(f.start, min(f.end + 1, len(lines)))}
+    fence_at = [f.start for f in diagrams]
     keep = set(range(len(lines))) if (not near_figures or not fence_at) else set()
     for f in fence_at:
         level = 7
@@ -1427,16 +1590,7 @@ def visible_text(path: Path, near_figures: bool = True) -> str:
         # the section, and what sits directly beneath the figure even under its own heading:
         # a table or legend "beside the figure" is usually the next block
         keep.update(range(start, min(len(lines), max(end, f + NEAR_FIGURE_LINES))))
-    out, skip = [], False
-    for i, ln in enumerate(lines):
-        if MERMAID_FENCE.match(ln):
-            skip = True
-            continue
-        if skip and FENCE_END.match(ln):
-            skip = False
-            continue
-        if not skip and i in keep:
-            out.append(ln)
+    out = [ln for i, ln in enumerate(lines) if i in keep and i not in inside]
     return "\n".join(out)
 
 
@@ -1459,7 +1613,7 @@ def shares_context(line: str, old_label: str, new_label: str = "") -> bool:
         return True
     # a label that is nothing but one identifier is its own context; a label with several codes
     # must be met by at least two of them
-    detail = _detail_tokens(old_label)
+    detail = {t.lower() for t in _detail_tokens(old_label)}
     return len(detail & lt) >= min(2, len(detail)) > 0
 
 
@@ -1581,9 +1735,12 @@ def cmd_diff(args: argparse.Namespace) -> int:
         raw_members = {b_key[k]: v for k, v in before.members.items() if k in b_key}
         section_text = "\n".join(ln for _, ln in context_lines)
         for k in removed_n:
-            texts = [b_label[k]] + raw_members.get(k, [])
-            found = all(token_present(t, section_tokens, section_text)
-                        for txt in texts for t in (_detail_tokens(txt) or _tokens(txt)))
+            # the label is matched whole (plain words and detail alike), so "Refunds API | 402"
+            # cannot stand in for a dropped "Billing API 402" just because the code matches;
+            # a member with no detail tokens still falls back to its plain words
+            label_toks = _detail_tokens(b_label[k]) | _tokens(b_label[k])
+            member_toks = {t for txt in raw_members.get(k, []) for t in (_detail_tokens(txt) or _tokens(txt))}
+            found = all(token_present(t, section_tokens, section_text) for t in label_toks | member_toks)
             if found:
                 declared_ok.append(k)
             else:

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import importlib.util
 import json
 import re
 import sys
@@ -31,6 +32,26 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, 'reconfigure'):
         _stream.reconfigure(encoding='utf-8', errors='replace')
 
+
+def _shared(name: str):
+    """A module the diagram skill owns and this gate shares — what a fence is, and when a
+    shortened identifier is still present — loaded by path from the diagram skill installed
+    beside this one, so the two gates cannot disagree on either."""
+    path = Path(__file__).resolve().parents[2] / 'diagram' / 'scripts' / f'{name}.py'
+    key = f'_diagram_{name}'
+    if key not in sys.modules:
+        if not path.exists():
+            raise SystemExit(f'prose_audit: {path} is missing; the edit skill needs the diagram skill installed beside it')
+        spec = importlib.util.spec_from_file_location(key, path)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[key] = mod
+        spec.loader.exec_module(mod)
+    return sys.modules[key]
+
+
+fences = _shared('fences')
+presence = _shared('presence')
+
 # ---------------------------------------------------------------- thresholds
 
 LONG_SENTENCE = 30          # words; the share of these is the first number an editor looks at
@@ -40,9 +61,25 @@ WALL_WORDS = 300            # body words with no heading, list, table, figure or
 DENSE_CODE = 8              # code spans per hundred words: the prose is a reference, not an argument
 EXAMPLE_NUMBER_DIGITS = 4   # a bare number this long is an example value: reported, never a blocker
 
+# reading_cost()'s weights, named: what an editor would flag first weighs most, and a threshold
+# marks "cost accrues only past this point" where one is not already a flag above.
+LONG_SENTENCE_SHARE_WEIGHT = 40   # the first number an editor looks at
+VERY_LONG_SENTENCE_WEIGHT = 20.0  # per very-long sentence, as a share of the section's sentences
+PARAGRAPH_OVERAGE_FLOOR = 60      # words; stricter than LONG_PARAGRAPH's flag, which only names it
+PARAGRAPH_OVERAGE_WEIGHT = 0.08
+WALL_WEIGHT = 6                   # per wall
+WALL_LENGTH_WEIGHT = 0.01         # per word of the longest wall
+PARENS_WEIGHT = 8                 # parentheticals and dashes per sentence
+PASSIVE_WEIGHT = 10
+NOMINAL_FLOOR = 6                 # nominalisations per 100 words; cost accrues past this
+NOMINAL_WEIGHT = 0.3
+GRADE_FLOOR = 12                  # reading grade; cost accrues past this
+GRADE_WEIGHT = 0.5
+CODE_DENSITY_WEIGHT = 0.4         # per point over DENSE_CODE
+HEDGE_WEIGHT = 0.5
+
 # ---------------------------------------------------------------- markdown reading
 
-FENCE_RE = re.compile(r'^\s*(```+|~~~+)\s*(\S*)\s*$')
 HEADING_RE = re.compile(r'^(#{1,6})\s+(.*?)\s*#*\s*$')
 LIST_RE = re.compile(r'^\s*(?:[-*+]|\d+[.)])\s+')
 TABLE_RE = re.compile(r'^\s*\|')
@@ -62,7 +99,7 @@ class Block:
 
 def parse(md: str) -> list[Block]:
     """A flat block list. Lists and tables are one block each; a paragraph is its own block."""
-    lines = md.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    lines = fences.split_lines(md)
     blocks: list[Block] = []
     i = 0
     n = len(lines)
@@ -71,16 +108,11 @@ def parse(md: str) -> list[Block]:
         if not line.strip() or COMMENT_RE.match(line):
             i += 1
             continue
-        f = FENCE_RE.match(line)
+        f = fences.fence_at(lines, i)
         if f:
-            start = i
-            lang = f.group(2)
-            i += 1
-            while i < n and not re.match(r'^\s*' + re.escape(f.group(1)[0]) + r'{3,}\s*$', lines[i]):
-                i += 1
-            body = '\n'.join(lines[start + 1:i])
-            blocks.append(Block('fence', body, start + 1, lang=lang))
-            i += 1
+            body = '\n'.join(lines[f.start + 1:f.end])
+            blocks.append(Block('fence', body, f.start + 1, lang=f.lang))
+            i = f.end + 1
             continue
         h = HEADING_RE.match(line)
         if h:
@@ -113,11 +145,11 @@ def parse(md: str) -> list[Block]:
                     j = i + 1
                     while j < n and not lines[j].strip():
                         j += 1
-                    if j < n and (LIST_RE.match(lines[j]) or (lines[j].startswith('  ') and not FENCE_RE.match(lines[j]))):
+                    if j < n and (LIST_RE.match(lines[j]) or (lines[j].startswith('  ') and not fences.opener(lines[j]))):
                         i = j
                         continue
                     break
-                if HEADING_RE.match(cur) or FENCE_RE.match(cur) or TABLE_RE.match(cur) or HR_RE.match(cur):
+                if HEADING_RE.match(cur) or fences.opener(cur) or TABLE_RE.match(cur) or HR_RE.match(cur):
                     break
                 if not (LIST_RE.match(cur) or cur.startswith((' ', '\t'))):
                     break
@@ -127,7 +159,7 @@ def parse(md: str) -> list[Block]:
         # paragraph: up to the next blank line or structural line
         start = i
         i += 1
-        while i < n and lines[i].strip() and not (HEADING_RE.match(lines[i]) or FENCE_RE.match(lines[i]) or TABLE_RE.match(lines[i]) or QUOTE_RE.match(lines[i]) or LIST_RE.match(lines[i]) or HR_RE.match(lines[i])):
+        while i < n and lines[i].strip() and not (HEADING_RE.match(lines[i]) or fences.opener(lines[i]) or TABLE_RE.match(lines[i]) or QUOTE_RE.match(lines[i]) or LIST_RE.match(lines[i]) or HR_RE.match(lines[i])):
             i += 1
         blocks.append(Block('p', ' '.join(l.strip() for l in lines[start:i]), start + 1))
     return blocks
@@ -278,16 +310,16 @@ def reading_cost(m: Measures) -> float:
     if not m.words:
         return 0.0
     cost = 0.0
-    cost += 40 * m.long_sentence_share
-    cost += 2.0 * m.very_long_sentences / max(1, m.sentences) * 10
-    cost += 0.08 * max(0, m.words_per_paragraph - 60)
-    cost += 6 * m.walls + 0.01 * m.longest_wall
-    cost += 8 * m.parens_per_sentence
-    cost += 10 * m.passive_share
-    cost += 0.3 * max(0, m.nominal_per_100 - 6)
-    cost += 0.5 * max(0, m.grade - 12)
-    cost += 0.4 * max(0, m.code_per_100 - DENSE_CODE)
-    cost += 0.5 * m.hedges
+    cost += LONG_SENTENCE_SHARE_WEIGHT * m.long_sentence_share
+    cost += VERY_LONG_SENTENCE_WEIGHT * m.very_long_sentences / max(1, m.sentences)
+    cost += PARAGRAPH_OVERAGE_WEIGHT * max(0, m.words_per_paragraph - PARAGRAPH_OVERAGE_FLOOR)
+    cost += WALL_WEIGHT * m.walls + WALL_LENGTH_WEIGHT * m.longest_wall
+    cost += PARENS_WEIGHT * m.parens_per_sentence
+    cost += PASSIVE_WEIGHT * m.passive_share
+    cost += NOMINAL_WEIGHT * max(0, m.nominal_per_100 - NOMINAL_FLOOR)
+    cost += GRADE_WEIGHT * max(0, m.grade - GRADE_FLOOR)
+    cost += CODE_DENSITY_WEIGHT * max(0, m.code_per_100 - DENSE_CODE)
+    cost += HEDGE_WEIGHT * m.hedges
     return round(cost, 1)
 
 
@@ -375,6 +407,23 @@ def document_measures(blocks: list[Block]) -> Measures:
     return m
 
 
+# ---------------------------------------------------------------- reading files
+
+def read_markdown(path: Path) -> tuple[str | None, str | None]:
+    """Read one markdown file. UTF-8 (with BOM) first; the Windows ANSI code page next, for a
+    note Notepad saved. Returns (text, note): note is None on a clean UTF-8 read, else says
+    which encoding was used, or — text is None — that the file could not be read at all. Never
+    raises: a bad file is reported, not a crash, and never silently dropped."""
+    try:
+        return path.read_text(encoding='utf-8-sig'), None
+    except UnicodeDecodeError:
+        pass
+    try:
+        return path.read_text(encoding='cp1252'), f'{path}: not valid UTF-8, read as cp1252'
+    except UnicodeDecodeError as e:
+        return None, f'{path}: unreadable, neither UTF-8 nor cp1252 ({e})'
+
+
 # ---------------------------------------------------------------- audit / check output
 
 def fmt_section(s: Section, with_file: bool) -> str:
@@ -390,7 +439,12 @@ def fmt_section(s: Section, with_file: bool) -> str:
 
 def cmd_check(args) -> int:
     path = Path(args.file)
-    md = path.read_text(encoding='utf-8')
+    md, note = read_markdown(path)
+    if md is None:
+        print(f'error: {note}')
+        return 1
+    if note:
+        print(f'warning: {note}')
     blocks = parse(md)
     doc = document_measures(blocks)
     print(f'{path.name}: {doc.words} words, {doc.sentences} sentences, {doc.words_per_sentence} words/sentence, '
@@ -422,11 +476,14 @@ def cmd_audit(args) -> int:
             keep.append(f)
     rows: list[Section] = []
     docs = []
+    unreadable = []
     for f in keep:
-        try:
-            md = f.read_text(encoding='utf-8')
-        except UnicodeDecodeError:
+        md, note = read_markdown(f)
+        if md is None:
+            unreadable.append((f, note))
             continue
+        if note:
+            print(f'warning: {note}')
         blocks = parse(md)
         dm = document_measures(blocks)
         docs.append((f, dm))
@@ -436,7 +493,9 @@ def cmd_audit(args) -> int:
     total_words = sum(d.words for _, d in docs)
     walls = sum(r.measures.walls for r in rows)
     print(f'{len(docs)} document(s), {total_words} words, {len(rows)} section(s) of 60+ words, {walls} wall(s); '
-          f'{len(excluded)} file(s) excluded')
+          f'{len(excluded)} file(s) excluded' + (f', {len(unreadable)} file(s) unreadable' if unreadable else ''))
+    for f, note in unreadable:
+        print(f'  {note}')
     if docs:
         worst_docs = sorted(docs, key=lambda d: d[1].cost, reverse=True)
         print('documents by cost:')
@@ -528,7 +587,8 @@ def present(kind: str, value: str, after_text: str, after_norm: str, after_facts
         return value in {v for v, _ in after_facts['fence']}
     if kind == 'code':
         v = value.strip()
-        return v in {c for c, _ in after_facts['code']} or v in after_text
+        return (v in {c for c, _ in after_facts['code']} or v in after_text
+                or presence.member_present(v, after_text))
     if kind in ('heading', 'cell'):
         return value in after_norm
     if kind == 'ref':
@@ -541,7 +601,7 @@ def present(kind: str, value: str, after_text: str, after_norm: str, after_facts
         spaced = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', value).replace('_', ' ').replace('-', ' ')
         if spaced.lower() in after_norm:
             return True
-        return False
+        return presence.member_present(value, after_text)  # the shared rule: woDetail.Installer_ID kept by Installer_ID
     if kind == 'number':
         # "30 s" and "30s" are the same fact; the space between number and unit is free.
         pat = re.escape(value).replace(r'\ ', r'\s?')

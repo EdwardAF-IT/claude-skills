@@ -9,9 +9,9 @@ Edward has hundreds of diagrams across his documentation and most of them have p
 already tell a bad diagram by looking; what costs him is the manual work of fixing them, and
 deciding where a document needs one it has not got. **This skill does the work, not the critique.**
 
-A baseline audit of IME's `developer-reference` tree at the ADO target, fixtures excluded, is what
-`scripts/audit.py audit` prints; re-run it rather than quoting a stale figure. (The old "22-word
-label" in this file came from `harness/tests/python/fixtures/label-length-fail-very-long.mmd`, a
+A baseline audit of a real documentation tree at the ADO target, fixtures excluded, is what
+`scripts/audit.py audit` prints; re-run it rather than quoting a stale figure. (A once-quoted
+"22-word label" in this file came from a `fixtures/label-length-fail-very-long.mmd`-style file, a
 diagram written to fail the validator; fixtures are skipped by default now.) The shape it shows:
 most diagrams are illegible at target width, most of those because of label length, a good share
 have too many nodes for one figure, and a minority are flowcharts drawn around what is really a
@@ -35,16 +35,17 @@ python ~/.claude/skills/diagram/scripts/audit.py graph <file>                   
 python ~/.claude/skills/diagram/scripts/audit.py diff <before> <after> [<after2>…] # the redraw gate
 ```
 
-**Before trusting a change to `audit.py`, run its own suite** — twelve cases, one per check, each
-with a fixture that fails without the fix it guards:
+**Before trusting a change to `audit.py`, run its own suite** — one case per check, each with a
+fixture that fails without the fix it guards:
 
 ```bash
-python ~/.claude/skills/diagram/tests/selftest.py     # 12/12, or it is not safe to use
+python ~/.claude/skills/diagram/tests/selftest.py     # prints N/N; every case must pass, or it is not safe to use
 ```
 
-It has been mutation-tested: dropping one word boundary from the flowchart keyword guard takes it
-to 10/12. A gate suite that cannot go red is decoration, so keep that property — every new check
-arrives with a case that fails without it.
+It has been mutation-tested: dropping one word boundary from the flowchart keyword guard turns a
+passing case red. A gate suite that cannot go red is decoration, so keep that property — every new
+check arrives with a case that fails without it, and the count in the tool's own output is the
+one to trust, never a number quoted here.
 
 It renders every diagram and measures from the rendered SVG, where every piece of text is present
 with its real size: **the smallest label at the target's real width**, the widest text run and its
@@ -83,8 +84,7 @@ a box — is claimed only where a box can be fixed (Graphviz `fixedsize`, explic
 sizes every box it draws to its text, so the tool does not cry overflow there.
 
 **Splitting a sequence diagram** (the cure for six or more participants) is a mechanical
-discipline, and `scripts/split-sequence.py <dir>` is the worked example over nine IME
-diagrams: every message and note copied by exact text and placed exactly once, the boundary a
+discipline: every message and note copied by exact text and placed exactly once, the boundary a
 stage or the hop between two API surfaces, participants declared per figure, a message over
 about eighteen characters re-broken with `<br/>` (a space to the gate), a path or identifier
 moved to a note spanning the same two participants, a long identifier broken at its camel-case
@@ -121,7 +121,10 @@ document is not a relocation. Notes and the rendered title are diagram scope; a 
 nowhere. The matching is not whole-string: `/workorders/` is present in
 `/api/v2/workorders/{id}`, a `123` that became `{id}` was generalised, not lost; `InternalAPI`
 written as `Internal API` is kept; `Installer_ID` is kept by `woDetail.Installer_ID` and the
-reverse; a token cut by an ellipsis is a prefix; `e.g.` is prose; and a bare number of four or
+reverse — a local variable's prefix is not part of the name — but a type or namespace prefix is
+(`Console.WriteLine` is not kept by `WriteLine`), and so is any prefix whose member says nothing
+alone (`order.Id` is not kept by `Id`); the rule lives once, in `scripts/presence.py`, shared with
+the edit gate; a token cut by an ellipsis is a prefix; `e.g.` is prose; and a bare number of four or
 more digits is an example value, reported as dropped but never a blocker. A gate that cries wolf
 is a gate that gets ignored, which is worse than none.
 An entity moved whole into a table beside the figure is a **declared restructure**: pass
@@ -237,24 +240,25 @@ Stop when asked. Report the queue position.
 
 ## Roles
 
-The judgement lives in Personetta, and the composed bodies are readable at
-`~/.personetta/claude-recipes/`:
+Two jobs, whether or not a persona system is installed to carry them:
 
-- **`design-diagram`** — the author. Type selection, the label rule, splitting, target discipline,
-  preserving what a redraw inherits.
-- **`review-diagram`** — the art director. Renders and measures, rules on type fit and legibility,
-  traces a symptom to its cause, finds the passages that need a figure.
+- **The author.** Type selection, the label rule, splitting, target discipline, preserving what a
+  redraw inherits — the rules earlier in this file.
+- **The reviewer.** Renders and measures, rules on type fit and legibility, traces a symptom to its
+  cause, finds the passages that need a figure — what `scripts/audit.py` does, read through this
+  file's judgement calls.
 
-Use the reviewer to decide what to fix and the author to fix it. For a big corpus, review once to
-build the queue, then author through it.
+Review first to build the queue, then author through it. If a persona system such as Personetta is
+installed with dedicated diagram recipes, its `design-diagram` and `review-diagram` roles can carry
+these two jobs; without one, follow this file directly — nothing here depends on it being present.
 
 ## Repo conventions
 
-If the repo states a diagram contract, it wins. IME's
-`developer-reference/harness/process-docs/diagram-authoring.md` is the fullest example: one diagram
-per file, raw source with no markdown fence, required frontmatter, `%%` comments only, and the
-ADO-safe colour rule (**every hex literal must contain a letter** — Azure DevOps substitutes
-`#<digits>` as a work-item mention inside mermaid and corrupts the diagram). That repo also has
-`validate-diagrams.py` and an embed pipeline that strips directives on the way to the wiki; call the
-repo's own tools rather than duplicating them. Its `harness/tests/**/fixtures` hold diagrams built
-to fail that validator; they are not part of any corpus statistic.
+If the repo states a diagram contract, it wins. A `process-docs/diagram-authoring.md`-style file is
+the fullest kind of example: one diagram per file, raw source with no markdown fence, required
+frontmatter, `%%` comments only, and the ADO-safe colour rule (**every hex literal must contain a
+letter** — Azure DevOps substitutes `#<digits>` as a work-item mention inside mermaid and corrupts
+the diagram). A repo with its own `validate-diagrams.py` and an embed pipeline that strips
+directives on the way to the wiki should have that pipeline called rather than duplicated. Its
+`**/fixtures` directories hold diagrams built to fail that validator; they are not part of any
+corpus statistic.

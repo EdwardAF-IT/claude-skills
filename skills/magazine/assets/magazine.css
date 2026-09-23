@@ -17,9 +17,13 @@
  *   .kind-dashboard single column (landscape when a table is wide), sans body, compact masthead
  */
 
+/* The edition's one palette. The builder resolves the plates' colors from this block too
+ * (mermaid-theme.json names them as var(--name)), so a color changed here, or by --accent,
+ * changes the diagrams with the page. */
 :root {
   --ink:        #1b2430;
   --ink-soft:   #5b6672;
+  --ink-faint:  #8b95a3;   /* a line that recedes: a sequence diagram's lifelines */
   --paper:      #ffffff;
   --shell:      #e9ecf1;
   --line:       #cfd4dc;   /* a rule that carries meaning: column rule, card border, dd rule */
@@ -35,6 +39,9 @@
   --red:    #c23b3b;  --red-bg:    #fbe9e9;
   --violet: #6b3fa0;  --violet-bg: #f1e9f7;
   --orange: #c1631f;  --orange-bg: #fbeee1;
+  --teal:   #2d8a8f;  --teal-bg:   #e6f2f3;
+  /* second shades, for a pie past eight slices */
+  --blue-2: #4a6fa5;  --green-2: #3f8f6a;  --amber-2: #97702a;  --violet-2: #7d5aa8;
 
   --serif: Georgia, "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
   --sans:  "Segoe UI", "Trebuchet MS", system-ui, Arial, sans-serif;

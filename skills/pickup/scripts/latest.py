@@ -5,11 +5,14 @@ Usage: python latest.py [name] [--root <repo>]
 Looks in docs/handoffs, .claude/handoffs and .claude/checkpoints under the repo (and under the
 git root when run from a subfolder). Each note carries a name in its banner
 ("# Handoff 2026-09-21 14:05 · doc-pipeline"); a note from before names existed is known by
-the slug of its filename. With a name, only notes of that name are listed and the newest is
-the one to resume; without one, every note is listed with its name so the reader can choose.
-For the chosen note it prints the commits and dirty files git has seen since its timestamp,
-so the reader can tell what the note does not know about.
+the slug of its filename. Names are compared case- and separator-insensitively, so a banner's
+"Doc Pipeline" and a file named doc-pipeline.md are the same note. With a name, only notes of
+that name are listed and the newest is the one to resume; without one, every note is listed
+with its name so the reader can choose. For the chosen note it prints the commits and dirty
+files git has seen since its timestamp, so the reader can tell what the note does not know
+about.
 """
+import argparse
 import re
 import subprocess
 import sys
@@ -23,41 +26,57 @@ HEADER = re.compile(
 SLUG = re.compile(r"^\d{4}-\d{2}-\d{2}-?(.*)$")
 
 
-def git(root: Path, *args: str) -> str:
+def normalize_name(s: str) -> str:
+    """Case and separators fold to one form, so a banner's "Doc Pipeline" and a filename slug
+    "doc-pipeline" compare equal instead of missing each other by a space versus a hyphen."""
+    return re.sub(r"[\s_]+", "-", s.strip().lower())
+
+
+def git(root: Path, *args: str) -> tuple[bool, str]:
+    """(ok, output). ok is False both for a nonzero exit and for git failing to run at all — the
+    two situations pickup must never present as "nothing happened since the note"."""
     try:
-        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
-                              encoding="utf-8", errors="replace", timeout=30).stdout.strip()
-    except Exception:
-        return ""
+        r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=30)
+        return r.returncode == 0, (r.stdout.strip() or r.stderr.strip())
+    except Exception as e:
+        return False, str(e)
 
 
 def describe(path: Path) -> tuple[datetime, str, str]:
-    """(timestamp, kind, name) — from the banner; the filename slug names an unnamed note."""
+    """(timestamp, kind, name) — from the banner; the filename slug names an unnamed note, or
+    stands in when the banner's date is not a real date."""
     try:
         head = path.read_text(encoding="utf-8", errors="replace")[:400]
     except OSError:
         head = ""
-    m = HEADER.search(head)
-    slug = (SLUG.match(path.stem) or [None, path.stem])[1] or path.stem
-    if m:
-        when = datetime.strptime(m.group(2) + " " + (m.group(3) or "00:00"), "%Y-%m-%d %H:%M")
-        return when, m.group(1).lower(), (m.group("name") or slug).strip().lower()
-    return datetime.fromtimestamp(path.stat().st_mtime), "note", slug.lower()
+    m = SLUG.match(path.stem)
+    slug = m.group(1) if m and m.group(1) else path.stem
+    header = HEADER.search(head)
+    if not header:
+        return datetime.fromtimestamp(path.stat().st_mtime), "note", normalize_name(slug)
+    try:
+        when = datetime.strptime(header.group(2) + " " + (header.group(3) or "00:00"), "%Y-%m-%d %H:%M")
+    except ValueError:
+        # The banner has the right shape but not a real date or time (Feb 30, hour 25 — an LLM
+        # wrote it by hand). Fall back to the file's mtime rather than losing every other note
+        # in the listing to one bad banner.
+        when = datetime.fromtimestamp(path.stat().st_mtime)
+    name = normalize_name(header.group("name") or slug)
+    return when, header.group(1).lower(), name
 
 
-def main() -> int:
-    args = sys.argv[1:]
-    root_arg = None
-    if "--root" in args:
-        i = args.index("--root")
-        root_arg = args[i + 1]
-        del args[i:i + 2]
-    want = args[0].strip().lower() if args else None
-    start = Path(root_arg or ".").resolve()
-    top = git(start, "rev-parse", "--show-toplevel")
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("name", nargs="?", help="only list notes with this name")
+    ap.add_argument("--root", help="repo to look in (default: cwd)")
+    args = ap.parse_args(argv)
+    want = normalize_name(args.name) if args.name else None
+    start = Path(args.root or ".").resolve()
+    top_ok, top = git(start, "rev-parse", "--show-toplevel")
     # The cwd, its git root, and any ancestor that keeps notes of its own: a session opened in
     # C:\Code\maestro must still find the note a sibling session left at C:\Code.
-    roots = [start] + ([Path(top)] if top and Path(top) != start else [])
+    roots = [start] + ([Path(top)] if top_ok and top and Path(top) != start else [])
     for parent in start.parents:
         if any((parent / d).is_dir() for d in NOTE_DIRS) and parent not in roots:
             roots.append(parent)
@@ -87,15 +106,21 @@ def main() -> int:
         if others:
             print(f"other names here (sibling sessions'): {', '.join(others)}")
     when, kind, name, newest = picked[0]
-    root = Path(top) if top else start
+    root = Path(top) if top_ok and top else start
     since = when.strftime("%Y-%m-%dT%H:%M")
     print(f"\nresume from: {newest}")
-    log = git(root, "log", "--oneline", f"--since={since}", "--all")
     print(f"commits since {since} (all branches):")
-    print(log if log else "  none")
-    dirty = git(root, "status", "--short")
+    log_ok, log = git(root, "log", "--oneline", f"--since={since}", "--all")
+    if not log_ok:
+        print(f"  git failed: {log or 'could not run git'} — this note cannot know what happened since")
+    else:
+        print(log if log else "  none")
     print("dirty now:")
-    print(dirty if dirty else "  clean")
+    status_ok, dirty = git(root, "status", "--short")
+    if not status_ok:
+        print(f"  git failed: {dirty or 'could not run git'} — this note cannot know what happened since")
+    else:
+        print(dirty if dirty else "  clean")
     return 0
 
 

@@ -1,0 +1,14 @@
+{
+  "_comment": "What a fenced block is, and which fences hold a diagram: the one definition every tool reads (diagram audit.py, edit prose_audit.py, publish.py through fences.py; the magazine builder directly). A fence opens with a run of at least minLength of one marker character and closes with a run of the same character at least as long, alone on its line; unterminated, it runs to the end of the document. The info string's first word is the language. A marker with anyLanguage false is a fence only when that language is a diagram language: Azure DevOps writes ::: mermaid, while ::: note is prose. Languages are matched without regard to case.",
+  "minLength": 3,
+  "markers": [
+    { "char": "`", "anyLanguage": true },
+    { "char": "~", "anyLanguage": true },
+    { "char": ":", "anyLanguage": false }
+  ],
+  "diagramLanguages": {
+    "mermaid": "mermaid",
+    "dot": "graphviz",
+    "graphviz": "graphviz"
+  }
+}

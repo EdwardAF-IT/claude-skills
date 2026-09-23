@@ -77,6 +77,12 @@ can raise, each with its destination. Exit 0 is green across the board. It does 
 half; the judgement half (the cold reader's meaning list, the art director's eye, the author's
 answers) comes from the agents and lands as tickets in the same shape, by hand.
 
+A stage's verdict comes from its tool's exit code first: a crashed gate (an exit code outside
+that gate's own documented contract, or a traceback in its output) is red, never a silent green.
+With `--before`, the diagram stage also runs its own redraw diff against it — a redraw that kept
+every node and edge is green even though every fence byte changed; one that dropped a node or
+edge is red with a ticket back to `diagram`, never to `edit`.
+
 ```
 publish board: docs/design/execution-broker.md
   [green] diagram   30 figure(s), 0 blocker(s), audit exit 1

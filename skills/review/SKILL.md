@@ -22,10 +22,11 @@ When the args are `--help`, `-h`, `help`, or `?`, print this and do nothing else
 ```
 /review [personas...] [flags]      Review board over the current repo
 
-COST, up front: a 3-persona round measured 384,402 tokens and ~14 minutes
-sequential (2026-09-19). The full eight extrapolates to roughly 900K-1.1M
-tokens and 35-45 minutes. The default is still the full board — pass --core
-for the cheap four when the round does not warrant all eight.
+COST, up front, measured: 3 personas on Fable/Opus, 384,402 tokens and ~14 min
+sequential (2026-09-19). The full board --cheap --parallel (9 agents, Opus/
+Sonnet/Haiku, ~8.6K-line repo): 1.46M tokens and ~8.5 min (2026-09-22).
+Expect the default tier to cost more than that. The default is still the full
+board — pass --core for the four that carry the most weight.
 
 PERSONAS   (none named = the full eight, which is the default on purpose.
             --core = architect, developer, coherence, sdet)
@@ -105,8 +106,12 @@ Composed persona bodies live at `~/.personetta/claude-recipes/<recipe>.md`. Read
 it in the dispatched agent's prompt. Do not paraphrase it, and do not run `personetta set-active` —
 that switches Edward's own session persona, which is not what a dispatch needs.
 
-If a recipe file is missing, say so and fall back to the closest one that exists rather than
-inventing a persona inline.
+**A missing recipe** — one rule, stated in the scope line so the fallback is never silent:
+
+- One recipe missing from an installed cache: use the closest recipe that exists and name it.
+- No cache at all (Personetta is not installed — the usual case on someone else's machine): give
+  each persona its one-line lens from the `--help` table plus the output contract, and say
+  "built-in lens, Personetta not installed" in the scope line. Never invent a longer persona.
 
 ## Per-repo configuration, optional
 
@@ -129,7 +134,7 @@ and he must keep that. Three inspection modes, none of which dispatches anything
 
 The bodies live at `~/.personetta/claude-recipes/<recipe>.md` and are plain markdown — he can also
 read them directly without this skill, which is the point of keeping the personas in Personetta.
-If a body is missing from the cache, say that the recipes need installing rather than improvising.
+If a body is missing, the missing-recipe rule above applies.
 
 Anything the skill adds on top of a persona — the output contract, the disposition ledger, the
 cold-read context starvation — must also appear in `--show`, or the display is lying about what
@@ -141,16 +146,18 @@ Findings, `round.json`, and `dispositions.md` default to `docs/reviews/` **insid
 the assumption that the target is a git repo Edward will commit that history into. Check with
 `git -C <target> rev-parse --is-inside-work-tree` (or equivalent) before assuming that.
 
-**If the target is not a git repo**, `docs/reviews/` has no defined owner — writing it into an
-arbitrary directory (a skills folder, a scratch checkout, someone else's tree) either pollutes it or
-silently vanishes with no repo history to anchor it, and the "never re-raise settled ground"
-guarantee evaporates exactly there. In that case use a location outside the target instead, keyed by
-the target's absolute path so unrelated non-repo targets never collide:
+**If the target is not a git repo, or is a public one**, `docs/reviews/` is the wrong home. In a
+non-repo it has no owner and no history, so the "never re-raise settled ground" guarantee evaporates.
+In a public repo it publishes Edward's review notes — the 2026-09-22 round of `claude-skills` sat
+untracked in the public checkout one publish away from being pushed. Check visibility with
+`gh repo view --json visibility` when the remote is on GitHub; unknown counts as public. In either
+case use the central store, outside every skill folder (an installer update rewrites those) and
+keyed by the target's absolute path so unrelated targets never collide:
 
 ```
-~/.claude/skills/review/state/<slugified-target-path>/dispositions.md
-~/.claude/skills/review/state/<slugified-target-path>/<date>/<persona>.md
-~/.claude/skills/review/state/<slugified-target-path>/<date>/round.json
+~/.claude/reviews/<slugified-target-path>/dispositions.md
+~/.claude/reviews/<slugified-target-path>/<date>/<persona>.md
+~/.claude/reviews/<slugified-target-path>/<date>/round.json
 ```
 
 Slugify by replacing `:`, `\`, and `/` with `-` (e.g. `C:\Users\corio\.claude\skills\review` becomes
@@ -272,9 +279,9 @@ Never mark a disposition on his behalf. A finding nobody has ruled on stays open
   when the skill was specified: default the full board, and give him a way to cancel a cycle. That
   instruction stands, and the cost measurement does not overturn it — he is not avoiding this board
   out of ignorance of what it costs, and quietly halving it would decide on his behalf.
-- **State the cost before dispatching, every time.** A 3-persona round on this skill's own first
-  live run cost 384,402 tokens and ~14 minutes sequential; eight extrapolates to roughly 900K-1.1M
-  tokens and 35-45 minutes. Put the estimate for whatever set is selected in the same scope line as
+- **State the cost before dispatching, every time.** Use the measured rounds in the `--help`
+  text, not an extrapolation — the first estimate (900K-1.1M for eight) undershot the measured
+  --cheap board by half. Put the estimate for whatever set is selected in the same scope line as
   step 2 of "Running a round." Informing the choice is the job; making it for him is not. `--core`
   runs the four that carry the most weight (architect, developer, coherence, sdet: structure, code
   quality, systemic drift, testedness) when the round does not warrant the full board.

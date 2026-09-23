@@ -1,0 +1,18 @@
+{
+  "_comment": "The printed page: the one home of its numbers. build-magazine.mjs places every plate against it, the diagram skill's audit.py measures its magazine target against it, and magazine.css states the same page to the browser, pinned to this file by tests/geometry.test.mjs. Inches unless named otherwise. safetyIn is held back from the content box so a plate sized to it never tips onto the next page; figureInsetIn is what a column plate gives up to the figure's rules and padding.",
+  "pxPerIn": 96,
+  "safetyIn": 0.02,
+  "figureInsetIn": 0.2,
+  "columnGapPx": 20,
+  "portrait": {
+    "pageIn": { "width": 8.5, "height": 11 },
+    "marginIn": { "top": 0.58, "side": 0.5, "bottom": 0.55 },
+    "sideIn": 2.6
+  },
+  "landscape": {
+    "pageIn": { "width": 11, "height": 8.5 },
+    "marginIn": { "top": 0.4, "side": 0.4, "bottom": 0.45 },
+    "sideIn": 3.0
+  },
+  "plateLandscapeMarginIn": 0.4
+}

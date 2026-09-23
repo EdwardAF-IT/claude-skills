@@ -164,8 +164,7 @@ its own form, because a page where every kind of information looks the same read
 | Table body | Every second row on the neutral ground; the foot rule in ink-soft; the head row keeps the table's one colour |
 | Card grid | Cards on the neutral ground with an ink-soft rule at the head — the record card's rule turned ninety degrees; no wire border |
 
-The art director's pass of 2026-09-20 (`proposals/art-director-2026-09-20.md`) is the reasoning
-behind the last six rows, and names what was rejected: coloured card titles, a hue per card set,
+An art director's pass of 2026-09-20 is the reasoning behind the last six rows, and names what was rejected: coloured card titles, a hue per card set,
 coloured code spans, a second accent, first-line indents, sidebars with written text.
 
 **The wording is never touched** — every one of those re-containers text. Bold-lead separators,

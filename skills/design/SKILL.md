@@ -84,12 +84,10 @@ window shows → fit with the stages and the shortest first build → failure mo
   between 21:00 and 07:00.
 - **Offer the reading copy.** He repeatedly asks for design docs as *"easy to read magazine or
   desktop-publishing style documents that I can print and read in the comfy chair"* — colorful,
-  body text serif 10pt. If the repo already has that machinery (in maestro:
-  `docs/research/magazine/magazine.css` and `build-digest.mjs`, printed through headless Chromium),
-  use it rather than inventing a layout. Offer once; don't build it unasked.
+  body text serif 10pt. Use [[magazine]] to produce it rather than inventing a layout. Offer once;
+  don't build it unasked.
 
 ## Review rounds
 
-When he asks for a review round rather than a single design, his preferred shape is four personas —
-architecture, lead dev, SDET, coherence — dispatched as four agents over the same target, whose
-findings become ledger items, remediating the foundational ones first.
+When he asks for a review round rather than a single design, that is [[review]]'s job, not this
+skill's — use it instead.

@@ -1,0 +1,6 @@
+# Only the skills, the installers and the readme are published; everything else stays local.
+__pycache__/
+*.pyc
+docs/
+node_modules/
+**/tests/failures/

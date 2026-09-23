@@ -4,13 +4,37 @@ suite that cannot go red is decoration. Run: python tests/selftest.py — expect
 from __future__ import annotations
 
 import io
+import json
+import re
+import shutil
 import sys
 import tempfile
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import prose_audit as pa  # noqa: E402
+
+FAILURES_DIR = Path(__file__).resolve().parent / 'failures'
+_current_case = ''
+
+
+@contextmanager
+def fixture_dir():
+    """A scratch directory for one case's fixtures. Deleted on success; kept under tests/failures/
+    for review when the case's assertion fails, so a red case can be reproduced and inspected
+    without re-reading the test code to reconstruct its input."""
+    d = Path(tempfile.mkdtemp())
+    try:
+        yield d
+    except BaseException:
+        name = re.sub(r'[^a-z0-9]+', '-', _current_case.lower()).strip('-')[:80] or 'case'
+        dest = FAILURES_DIR / name
+        shutil.rmtree(dest, ignore_errors=True)
+        shutil.copytree(d, dest)
+        raise
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 BEFORE = """# Doc
 
@@ -43,7 +67,7 @@ def run(argv) -> tuple[int, str]:
 
 
 def diff(before: str, after: str, *extra) -> tuple[int, str]:
-    with tempfile.TemporaryDirectory() as d:
+    with fixture_dir() as d:
         b = Path(d) / 'b.md'
         a = Path(d) / 'a.md'
         b.write_text(before, encoding='utf-8')
@@ -157,7 +181,7 @@ def _():
 def _():
     sentence = 'The loop runs a pass on a short interval and drains the durable queue before it dispatches anything at all. '
     md = '# D\n\n## 1. S\n\n' + '\n\n'.join([sentence * 4] * 5) + '\n'
-    with tempfile.TemporaryDirectory() as d:
+    with fixture_dir() as d:
         p = Path(d) / 'w.md'
         p.write_text(md, encoding='utf-8')
         code, out = run(['check', str(p)])
@@ -168,7 +192,7 @@ def _():
 def _():
     long = 'This sentence goes on and on with clause after clause and a parenthetical (which is the point) and a dash - and more - until it passes thirty words easily and then keeps going for a while longer.'
     md = f'# D\n\n## 1. S\n\nShort one. {long} Another short one.\n'
-    with tempfile.TemporaryDirectory() as d:
+    with fixture_dir() as d:
         p = Path(d) / 'l.md'
         p.write_text(md, encoding='utf-8')
         code, out = run(['check', str(p)])
@@ -179,7 +203,7 @@ def _():
 def _():
     item = '1. **A question.** This item runs on for a long while with clause after clause and a parenthetical (as they do) and a dash - and more - until it is well past thirty words, which is the point of the fixture.'
     md = '# D\n\n## 1. S\n\nShort.\n\n' + '\n'.join(item.replace('1.', f'{k}.') for k in range(1, 4)) + '\n'
-    with tempfile.TemporaryDirectory() as d:
+    with fixture_dir() as d:
         p = Path(d) / 'i.md'
         p.write_text(md, encoding='utf-8')
         code, out = run(['check', str(p)])
@@ -205,7 +229,7 @@ def _():
 def _():
     big = 'This sentence is built to run past forty-five words by stacking clause after clause after clause, with a parenthetical (as these do) and a dash - and another - and it keeps going until the count is safely past the line that the tool draws for a very long sentence indeed.'
     md = '# D\n\n## 1. S\n\n' + '\n\n'.join([big] * 5) + '\n'
-    with tempfile.TemporaryDirectory() as d:
+    with fixture_dir() as d:
         p = Path(d) / 'v.md'
         p.write_text(md, encoding='utf-8')
         code, out = run(['check', str(p)])
@@ -247,7 +271,7 @@ def _():
     dense = ('The pipeline, which is invoked by the pass that is fired by the interval or by an operator command that was written to the durable queue by Podium or by the CLI, is executed before anything is dispatched because every dispatch is based on the master that the landing has just moved. ' * 6)
     light = 'The loop runs all the time. A pass fires on a short interval. It also fires on a command. An idle pass costs nothing. ' * 8
     md = f'# D\n\n## 1. Dense\n\n{dense}\n\n## 2. Light\n\n{light}\n'
-    with tempfile.TemporaryDirectory() as d:
+    with fixture_dir() as d:
         p = Path(d) / 'r.md'
         p.write_text(md, encoding='utf-8')
         code, out = run(['audit', str(p)])
@@ -263,9 +287,77 @@ def _():
     assert 'reading cost rose' in out, out
 
 
+# A cp1252 file (Notepad's "ANSI") is not valid UTF-8 the moment it carries a curly quote or a
+# dash outside the ASCII range — the byte 0x92 below is a cp1252 right single quote, invalid as
+# a lone UTF-8 byte.
+ANSI_BYTES = (b'# D\n\n## 1. S\n\nHere\x92s a short section with enough words in it to be read as '
+              b'prose and not skipped as too small a fragment to bother measuring at all, which '
+              b'this sentence exists only to pad out past the sixty-word section floor.\n')
+
+
+@case('check reads a cp1252 file instead of crashing, and says so')
+def _():
+    with fixture_dir() as d:
+        p = d / 'ansi.md'
+        p.write_bytes(ANSI_BYTES)
+        code, out = run(['check', str(p)])
+    assert code == 0 and 'cp1252' in out, out
+
+
+@case('audit falls back to cp1252 and counts the file, never drops it silently')
+def _():
+    with fixture_dir() as d:
+        (d / 'ansi.md').write_bytes(ANSI_BYTES)
+        (d / 'good.md').write_text('# D\n\n## 1. S\n\nPlain text.\n', encoding='utf-8')
+        code, out = run(['audit', str(d)])
+    assert code == 0 and '2 document(s)' in out and 'cp1252' in out and '0 file(s) unreadable' not in out, out
+
+
+# Fixtures shared with the diagram, publish and magazine tests: every tool must give one answer.
+SHARED = Path(__file__).resolve().parents[2] / 'diagram' / 'tests'
+
+
+@case('the edit gate reads every fence shape the way every other tool does (shared fixture)')
+def _():
+    doc = (SHARED / 'fences' / 'every-fence.md').read_text(encoding='utf-8')
+    want = json.loads((SHARED / 'fences' / 'every-fence.expected.json').read_text(encoding='utf-8'))['fences']
+    got = [(b.line, b.lang) for b in pa.parse(doc) if b.kind == 'fence']
+    assert got == [(f['open'], f['lang']) for f in want], got
+    # the ::: note admonition is prose the editor may tighten, not a protected fence
+    assert any(b.kind == 'p' and 'prose inside an admonition' in b.text for b in pa.parse(doc))
+
+
+@case('a message rewritten inside an Azure DevOps ::: mermaid fence is DESTROYED, not KEPT')
+def _():
+    b = '# D\n\n::: mermaid\nflowchart TD\n  A[Start] --> B[Finish]\n:::\n'
+    code, out = diff(b, b.replace('Finish', 'Done'))
+    assert code == 2 and 'mermaid fence' in out, out
+
+
+@case('one presence rule with the diagram gate: every shared case gets the same verdict')
+def _():
+    cases = json.loads((SHARED / 'presence-cases.json').read_text(encoding='utf-8'))['cases']
+    for c in cases:
+        t = c['after']
+        for kind in ('ident', 'code'):
+            got = pa.present(kind, c['fact'], t, pa.norm(t), pa.facts(t))
+            assert got == c['kept'], (kind, c)
+
+
+@case('`woDetail.Installer_ID` rewritten as `Installer_ID` is KEPT; `Console.WriteLine` as `WriteLine` is not')
+def _():
+    code, out = diff('The lookup returns `woDetail.Installer_ID`.\n', 'The lookup returns `Installer_ID`.\n')
+    assert code == 0 and 'KEPT' in out, out
+    code, out = diff('Each row goes to `Console.WriteLine`.\n', 'Each row goes to `WriteLine`.\n')
+    assert code == 2 and 'Console.WriteLine' in out, out
+
+
 def main() -> int:
+    global _current_case
+    shutil.rmtree(FAILURES_DIR, ignore_errors=True)
     passed = 0
     for name, fn in CASES:
+        _current_case = name
         try:
             fn()
             passed += 1

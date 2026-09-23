@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kitchen Sink Fixture</title>
+<style>
+/*
+ * Magazine stylesheet — printable editions of markdown documents.
+ *
+ * Layout and typography only. It never introduces text content beyond short chrome (the folio,
+ * a figure label, the contents label, the masthead byline). Colour is assigned meaning and keeps
+ * it: the accent marks structure — section numerals, the rule over an h3, pull-quote rules, the
+ * verdict label, contents numerals, the drop cap — and nothing else. Semantic hues appear only
+ * through pills and diagrams, one meaning each for the whole edition.
+ *
+ * The type is built on one unit: the body leading, 13.5pt. Every vertical space is a multiple of
+ * it. The scale is a major third (1.25) from the 10pt body: 7.5 (labels), 8.5 (tables, code),
+ * 10 (body), 12.5 (deck), 16 (pull-quote), 20 (section heading), 26 (numeral), 30 (masthead).
+ *
+ * Three document kinds share everything below the recognisers and differ in the body class:
+ *   .kind-feature   two columns, serif body, feature masthead, contents, decks, pull-quotes
+ *   .kind-brief     single column, sans body, compact masthead, no contents, no pull-quotes
+ *   .kind-dashboard single column (landscape when a table is wide), sans body, compact masthead
+ */
+
+/* The edition's one palette. The builder resolves the plates' colors from this block too
+ * (mermaid-theme.json names them as var(--name)), so a color changed here, or by --accent,
+ * changes the diagrams with the page. */
+:root {
+  --ink:        #1b2430;
+  --ink-soft:   #5b6672;
+  --ink-faint:  #8b95a3;   /* a line that recedes: a sequence diagram's lifelines */
+  --paper:      #ffffff;
+  --shell:      #e9ecf1;
+  --line:       #cfd4dc;   /* a rule that carries meaning: column rule, card border, dd rule */
+  --line-soft:  #e4e8ee;   /* a rule that only separates: table rows */
+  --tint:       #f6f7f9;   /* a ground for code blocks and the odd panel */
+
+  --accent:     #2456a6;
+  --accent-bg:  #e1e9f6;   /* strong enough to survive a mono laser */
+
+  --blue:   #2456a6;  --blue-bg:   #e1e9f6;
+  --green:  #1f7a4d;  --green-bg:  #e9f5ee;
+  --amber:  #b3781c;  --amber-bg:  #faf1de;
+  --red:    #c23b3b;  --red-bg:    #fbe9e9;
+  --violet: #6b3fa0;  --violet-bg: #f1e9f7;
+  --orange: #c1631f;  --orange-bg: #fbeee1;
+  --teal:   #2d8a8f;  --teal-bg:   #e6f2f3;
+  /* second shades, for a pie past eight slices */
+  --blue-2: #4a6fa5;  --green-2: #3f8f6a;  --amber-2: #97702a;  --violet-2: #7d5aa8;
+
+  --serif: Georgia, "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  --sans:  "Segoe UI", "Trebuchet MS", system-ui, Arial, sans-serif;
+  --mono:  Consolas, "Cascadia Mono", Menlo, monospace;
+
+  --u:            13.5pt;              /* the baseline unit */
+  --body-size:    10pt;
+  --body-leading: 13.5pt;
+  --body-font:    var(--serif);
+}
+
+/* Body face by kind, overridable by flag (the builder sets one of these classes). */
+.serif-body { --body-font: var(--serif); --body-leading: 13.5pt; }
+.sans-body  { --body-font: var(--sans);  --body-leading: 14pt; --u: 14pt; }
+
+* { box-sizing: border-box; }
+
+html { background: var(--shell); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+body {
+  margin: 0;
+  font-family: var(--body-font);
+  font-size: var(--body-size);
+  line-height: var(--body-leading);
+  color: var(--ink);
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+}
+
+.page {
+  width: 8.5in;
+  margin: 0.4in auto;
+  padding: 0.58in 0.5in 0.55in;
+  background: var(--paper);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+.landscape .page { width: 11in; }
+
+/* ===== Masthead ===== */
+.masthead { border-top: 4px solid var(--accent); padding-top: calc(var(--u) * 1.25); margin-bottom: calc(var(--u) * 1.5); }
+.masthead .kicker {
+  font-family: var(--sans); text-transform: uppercase; letter-spacing: 0.18em;
+  font-size: 7.5pt; line-height: 10pt; font-weight: 700; color: var(--accent); margin: 0 0 6pt;
+}
+.masthead h1 {
+  font-family: var(--serif); font-size: 30pt; line-height: 32pt; font-weight: 700;
+  letter-spacing: -0.01em; margin: 0 0 6pt; text-wrap: balance;
+}
+.masthead .subhead { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 12.5pt; line-height: 17pt; margin: 0; }
+.masthead .byline {
+  margin-top: 10pt; padding-top: 7pt; border-top: 1px solid var(--line);
+  font-family: var(--sans); font-size: 7.5pt; line-height: 10pt; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-soft); display: flex; gap: 18px; flex-wrap: wrap;
+}
+/* The compact masthead for a brief or a dashboard: the title carries it, the rule is a rule. */
+.masthead.brief { border-top-width: 2px; padding-top: calc(var(--u) * 0.75); margin-bottom: var(--u); }
+.masthead.brief h1 { font-size: 22pt; line-height: 26pt; }
+.masthead.brief .subhead { font-size: 11pt; line-height: 15pt; }
+
+/* The thesis banner under the masthead */
+.spine {
+  margin: 0 0 calc(var(--u) * 1.5); padding: 12pt 16pt;
+  background: var(--accent-bg); border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0;
+}
+.spine .label {
+  font-family: var(--sans); text-transform: uppercase; letter-spacing: 0.14em;
+  font-size: 7.5pt; line-height: 10pt; font-weight: 700; color: var(--accent); margin-bottom: 3pt;
+}
+.spine p { margin: 0; font-family: var(--serif); font-style: italic; font-size: 12.5pt; line-height: 17pt; }
+
+/* ===== Contents ===== */
+.toc { margin: 0 0 calc(var(--u) * 1.5); padding: 10pt 0 0; border-top: 1px solid var(--line); break-inside: avoid; }
+.toc-label {
+  font-family: var(--sans); text-transform: uppercase; letter-spacing: 0.16em;
+  font-size: 7.5pt; line-height: 10pt; font-weight: 700; color: var(--ink-soft); margin: 0 0 6pt;
+}
+.toc ol { list-style: none; margin: 0; padding: 0; column-count: 2; column-gap: 26px; }
+.toc li { margin: 0 0 2pt; padding-left: 1.6em; text-indent: -1.6em; break-inside: avoid; font-family: var(--sans); font-size: 9.5pt; line-height: 14pt; }
+.toc a { color: var(--ink); text-decoration: none; }
+.toc-num { display: inline-block; width: 1.6em; text-indent: 0; font-family: var(--serif); font-weight: 700; color: var(--accent); }
+.toc-doc { break-inside: avoid; margin-bottom: 8pt; }
+.toc-doc > a { display: block; font-family: var(--serif); font-weight: 700; font-size: 10.5pt; margin-bottom: 3pt; }
+
+/* ===== Columns and the single column =====
+ * Prose flows in two columns of 3.65in; exhibits marked .full span the measure. A wide table or
+ * a diagram cannot shrink below its min-content width, so left inside a column it would paint
+ * over its neighbour. The gap is narrow on purpose: 20px keeps each column at 58-64 characters. */
+.columns { column-count: 2; column-gap: 20px; column-rule: 1px solid var(--line); column-fill: balance; }
+.columns > .full { column-span: all; }
+
+main { max-width: 100%; overflow-wrap: break-word; overflow-x: hidden; }
+main > * { max-width: 100%; }
+
+/* Single column: the running prose is held to 34em (about 80 characters at 10pt); headings,
+ * tables, cards and figures still take the whole width, which is what makes an exhibit read as
+ * an exhibit. */
+.flow > p, .flow > ul, .flow > ol, .flow > blockquote, .flow > h3, .flow > h4,
+.flow > .deflist, .flow > .runin, .flow > .ladder, .flow > .deck, .flow > .verdict { max-width: 34em; }
+.landscape .flow > p, .landscape .flow > ul, .landscape .flow > ol, .landscape .flow > blockquote,
+.landscape .flow > .deflist, .landscape .flow > .runin, .landscape .flow > .ladder { max-width: 40em; }
+/* 34em was set for Georgia; at Segoe 10pt it is 74 characters and 4.6in, and the 2.9in beside
+ * it read as a hole on a page of prose. 38em is the "about 80" the comment above promises. */
+.sans-body .flow > p, .sans-body .flow > ul, .sans-body .flow > ol, .sans-body .flow > blockquote,
+.sans-body .flow > h3, .sans-body .flow > h4, .sans-body .flow > .deflist, .sans-body .flow > .runin,
+.sans-body .flow > .ladder, .sans-body .flow > .deck, .sans-body .flow > .verdict { max-width: 38em; }
+
+/* ===== Section opener: a breath, not a band ===== */
+.opener {
+  margin: calc(var(--u) * 2.5) 0 calc(var(--u) * 0.5); padding: 0 0 6pt;
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: baseline; gap: 12px;
+  break-after: avoid; break-inside: avoid;
+}
+.opener:first-child, .opener.first { margin-top: 0; }
+.opener .numeral {
+  font-family: var(--serif); font-size: 26pt; line-height: 1; font-weight: 700;
+  color: var(--accent); opacity: 0.55; flex: none; min-width: 0.9em;
+}
+.opener .numeral:empty { min-width: 0; margin-right: -12px; }
+.opener h2 {
+  font-family: var(--serif); font-size: 20pt; line-height: 24pt; font-weight: 700;
+  color: var(--ink); margin: 0; text-wrap: balance;
+}
+.opener h2 code { font-size: 0.8em; background: none; padding: 0; }
+.kind-brief .opener { margin-top: calc(var(--u) * 2); }
+.kind-brief .opener h2, .kind-dashboard .opener h2 { font-size: 16pt; line-height: 20pt; }
+.kind-brief .opener .numeral, .kind-dashboard .opener .numeral { font-size: 20pt; }
+.opener.doc-start { break-before: page; margin-top: 0; }
+.opener.doc-start.first { break-before: auto; }
+.opener.doc-start h2 { font-size: 24pt; line-height: 28pt; }
+
+/* The deck: the section's point, across the measure, before the columns start. */
+.deck {
+  font-family: var(--serif); font-style: italic;
+  font-size: 12.5pt; line-height: 17pt; color: var(--ink-soft);
+  margin: 0 0 calc(var(--u) * 1.25); max-width: 46em; text-wrap: balance;
+  break-after: avoid;
+}
+.deck code { font-size: 0.85em; background: none; padding: 0; font-style: normal; }
+.kind-brief .deck, .kind-dashboard .deck { font-size: 11.5pt; line-height: 15pt; }
+
+/* The drop cap: the oldest entry point in the trade, a styling of a glyph the author wrote. */
+p.dropcap::first-letter {
+  font-family: var(--serif); font-weight: 700; color: var(--accent);
+  float: left; font-size: 3.1em; line-height: 0.82; margin: 0.06em 0.08em 0 0;
+}
+@supports (initial-letter: 3) {
+  p.dropcap::first-letter { float: none; font-size: inherit; line-height: inherit; initial-letter: 3; margin: 0 0.1em 0 0; }
+}
+
+/* ===== Headings inside a section ===== */
+h3 {
+  font-family: var(--sans); font-size: 11pt; line-height: 14pt; font-weight: 700;
+  margin: calc(var(--u) * 2) 0 calc(var(--u) * 0.5); break-after: avoid; break-inside: avoid;
+}
+h3::before { content: ""; display: block; width: 24px; height: 2px; background: var(--accent); margin-bottom: 5pt; }
+h4 {
+  font-family: var(--sans); font-size: 9.5pt; line-height: 13pt; font-weight: 700;
+  margin: var(--u) 0 calc(var(--u) * 0.25); break-after: avoid;
+}
+h5, h6 { font-family: var(--sans); font-size: 9.5pt; line-height: 13pt; margin: var(--u) 0 0; }
+/* An h4 over one short paragraph runs into it: a magazine sub-head on the paragraph's first
+ * line, the words unchanged, the break after the head gone. */
+h4.runin-head { display: inline; margin: 0 0.5em 0 0; }
+h4.runin-head + p { display: inline; }
+h4.runin-head + p::after { content: ""; display: block; margin-bottom: calc(var(--u) * 0.5); }
+/* A question heading is a band across the column: tint ground, accent rule down the left, the
+ * author's number set large — a new question is seen before it is read. The decision block's
+ * blue closes the question the same way, so each one has a visible top and bottom. */
+h3.question {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: calc(var(--u) * 2) 0 calc(var(--u) * 0.75); padding: 5pt 10px 5pt 8px;
+  background: var(--tint); border-left: 3px solid var(--accent); border-radius: 0 3px 3px 0;
+}
+h3.question::before { display: none; }
+.q-badge {
+  flex: none; font-size: 15pt; line-height: 14pt; font-weight: 700; letter-spacing: -0.02em;
+  color: var(--accent);
+}
+/* A lone bold-lead paragraph: the lead in sans so the eye catches it; no rule, no ground. */
+p.lead .runin-label { font-family: var(--sans); font-weight: 700; font-size: 9.5pt; }
+
+p { margin: 0 0 calc(var(--u) * 0.5); orphans: 3; widows: 3; text-wrap: pretty; }
+a { color: var(--ink); text-decoration: none; }
+strong { font-weight: 700; }
+
+ul, ol { margin: 0 0 var(--u); padding-left: 1.4em; }
+li { margin: 0 0 calc(var(--u) * 0.25); text-wrap: pretty; }
+li > ul, li > ol { margin: calc(var(--u) * 0.25) 0 0; }
+ul.task { list-style: none; padding-left: 0.2em; }
+ul.task li::before { content: "☐  "; color: var(--ink-soft); }
+ul.task li.done::before { content: "☑  "; color: var(--green); }
+
+hr { border: 0; border-top: 1px solid var(--line); margin: var(--u) 0; }
+
+/* ===== Tables ===== */
+/* A table is allowed to break across pages; the head repeats on each part. Nothing in a table is
+ * set below 8.5pt. */
+table {
+  width: 100%; max-width: 100%; table-layout: auto;
+  border-collapse: collapse; margin: calc(var(--u) * 1.5) 0;
+  font-family: var(--sans); font-size: 9.5pt; line-height: 13pt;
+  font-variant-numeric: tabular-nums; break-inside: auto;
+}
+.kind-dashboard table { font-size: 10pt; line-height: 13.5pt; }
+table.wide, .kind-dashboard table.wide { font-size: 9.5pt; line-height: 13pt; }
+table.wide td, table.wide th { padding: 5px 6px; }
+thead { display: table-header-group; break-inside: avoid; break-after: avoid; }
+tbody { break-inside: auto; }
+tr { break-inside: avoid; }
+thead th {
+  background: var(--accent-bg); color: var(--ink); text-align: left;
+  padding: 6px 8px; font-size: 7.5pt; line-height: 10pt; text-transform: uppercase; letter-spacing: 0.08em;
+  /* A header word must never fragment. */
+  overflow-wrap: normal; word-break: keep-all; hyphens: none;
+}
+th.nw, td.nw { white-space: nowrap; }
+thead th code { font-size: inherit; }
+td, tbody th { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+/* Every second row on the neutral ground, so the eye keeps its row across three-line cells; the
+ * foot rule steps up so the table's end reads as an end. The head row keeps the table's one colour. */
+tbody tr:nth-child(even) td, tbody tr:nth-child(even) th { background: var(--tint); }
+tbody tr:last-child td { border-bottom: 1.5px solid var(--ink-soft); }
+td code { font-size: 0.92em; }
+/* Long identifiers make a table refuse to narrow — but break-word only splits a token that
+ * cannot fit on a line by itself. Never `anywhere`, and never `hyphens`. */
+th, td { overflow-wrap: break-word; word-break: normal; hyphens: none; }
+
+/* ===== Blockquote, colophon ===== */
+/* A quoted passage after the first section reads as a panel: a tint, an accent rule. */
+blockquote {
+  break-inside: avoid; margin: var(--u) 0; padding: 10pt 14pt;
+  background: var(--accent-bg); border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0;
+  color: var(--ink); font-style: italic;
+}
+blockquote > :last-child { margin-bottom: 0; }
+/* A long quotation is read, not glanced at: roman, not italic. */
+blockquote.long { font-style: normal; }
+blockquote.long em { font-style: italic; }
+blockquote code { font-style: normal; }
+/* A document dense with the author's own quotations: a quiet indented italic, a hairline. */
+.quiet-quotes blockquote {
+  background: none; border-left: 2px solid var(--line); border-radius: 0;
+  padding: 2pt 0 2pt 12pt; margin: calc(var(--u) * 0.75) 0;
+}
+
+.colophon {
+  margin: 0 0 calc(var(--u) * 1.5); padding: 8pt 0 10pt;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  font-family: var(--sans); font-size: 8.5pt; line-height: 11.5pt; color: var(--ink-soft);
+  column-count: 2; column-gap: 20px;
+}
+.kind-brief .colophon, .kind-dashboard .colophon { column-count: 1; max-width: 40em; }
+.colophon p { margin: 0 0 5pt; }
+.colophon code { font-size: 0.95em; background: none; padding: 0; color: var(--ink-soft); }
+.colophon strong { color: var(--ink); }
+
+/* ===== Pull-quote ===== */
+/* A duplicate of a sentence the author emphasised, placed one block after its source, set in
+ * one column: colour in the rules, ink in the words, about 34 characters a line. */
+.pullquote {
+  break-inside: avoid; margin: calc(var(--u) * 1.5) 0; padding: 10pt 0 9pt;
+  border-top: 2px solid var(--accent); border-bottom: 1px solid var(--line);
+  font-family: var(--serif); font-style: italic; font-size: 16pt; line-height: 20pt; color: var(--ink);
+  text-wrap: balance;
+}
+.pullquote.full { font-size: 17pt; line-height: 22pt; max-width: 40em; }
+
+/* ===== Code ===== */
+/* In running prose an identifier is distinguished by its face alone: no box. Inside a table, a
+ * card or a definition list a box helps a cell scan, so the tint stays there. */
+code { font-family: var(--mono); font-size: 0.85em; color: var(--ink); background: none; padding: 0; border-radius: 0; }
+td code, .card code, .deflist code, .fields code { background: var(--tint); padding: 0.05em 0.3em; border-radius: 2px; }
+pre {
+  background: var(--tint); border: 1px solid var(--line-soft); border-radius: 3px;
+  padding: 8pt 10pt 8pt 2.5em; text-indent: -1.5em;
+  font-family: var(--mono); font-size: 7.5pt; line-height: 10.5pt;
+  margin: calc(var(--u) * 1.5) 0;
+  white-space: pre-wrap; overflow-wrap: break-word; max-width: 100%;
+  break-inside: auto; orphans: 3; widows: 3;
+}
+pre code { font-size: inherit; background: none; padding: 0; }
+/* Syntax colour on paper: weight and one accent carry it, hue is kept low so 7.5pt stays legible
+ * on a mono printer. Keywords bold ink, strings the accent, comments soft italic, names plain. */
+.hljs-keyword, .hljs-built_in, .hljs-type, .hljs-literal, .hljs-selector-tag, .hljs-meta { font-weight: 700; color: var(--ink); }
+.hljs-string, .hljs-regexp, .hljs-template-tag, .hljs-symbol { color: var(--accent); }
+.hljs-number { color: #1f7a4d; }
+.hljs-comment, .hljs-quote, .hljs-doctag { color: var(--ink-soft); font-style: italic; }
+.hljs-title, .hljs-title.function_, .hljs-title.class_, .hljs-section { color: var(--ink); font-weight: 700; }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-params, .hljs-property { color: #6b3fa0; }
+.hljs-punctuation, .hljs-operator { color: var(--ink-soft); }
+.single pre { font-size: 8pt; line-height: 11pt; }
+
+/* ===== Figures =====
+ * The builder sets every plate's printed size in inches, so pagination is known at build time.
+ * A plate is a picture between two rules, with a small label at its head; there is no frame
+ * around a frame. */
+figure { margin: calc(var(--u) * 1.5) 0; padding: 6pt 0 8pt; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: center; max-width: 100%; break-inside: avoid; }
+figure img { max-width: 100%; height: auto; }
+figure svg { display: block; margin: 4pt auto 0; max-width: 100%; }
+figure.diagram:not(.full) { margin: var(--u) 0; }
+.figure-label {
+  display: block; text-align: left; font-family: var(--sans); font-size: 7.5pt; line-height: 10pt;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft);
+}
+/* The paragraph that introduces a plate, in its own place, set as its caption. */
+.figure-lead { font-family: var(--sans); font-size: 8.5pt; line-height: 11.5pt; color: var(--ink-soft); margin: 0 0 4pt; max-width: 52em; text-align: left; break-after: avoid; }
+.figure-lead code { font-size: 0.95em; }
+/* A tall column plate fills one column while the prose keeps flowing in the other. */
+figure.diagram.tall { margin: 0 0 var(--u); }
+/* A strip-shaped plate turned on its side: the builder sizes the box; the picture is rotated a
+ * quarter turn clockwise inside it, so the reader turns the sheet the way a fold-out is read. */
+.turn { position: relative; margin: 4pt auto 0; overflow: hidden; }
+.turn > svg { position: absolute; left: 0; top: 0; transform: rotate(90deg) translateY(-100%); transform-origin: 0 0; max-width: none; margin: 0; }
+/* A local two-column section in a single-column edition: a tall plate in one column, the text
+ * that follows it in the other. */
+.columns.local { margin: var(--u) 0; }
+.columns.local > figure.diagram.tall { margin-top: 0; }
+/* A landscape plate takes a landscape page, and the text that follows it fills the rest of that
+ * page (the builder wraps both in .plate-page); a portrait plate goes where it fits. */
+.plate-page { page: plate; break-before: page; break-after: page; }
+.plate-page > figure { margin-top: 0; }
+.plate-page > p, .plate-page > ul, .plate-page > ol, .plate-page > blockquote, .plate-page > .deflist,
+.plate-page > .runin, .plate-page > .ladder, .plate-page > .deck, .plate-page > .verdict { max-width: 44em; }
+figure.plate-landscape svg { margin: 0 auto; }
+/* A plate sized to the page carries no margin of its own: the budget is the page. Chrome counts a
+ * bottom margin when deciding whether a block fits, and truncates a top margin at a page top, so
+ * the space after a plate belongs to whatever follows it. */
+figure.plate { margin-top: 0; margin-bottom: 0; }
+figure.plate + * { margin-top: calc(var(--u) * 1.5); }
+figure pre { margin: 0; text-align: left; }
+figure pre.mermaid { background: none; border: 0; padding: 0; text-indent: 0; }
+
+/* The separator that followed a bold lead in the source, kept but quiet. */
+.sep { color: var(--ink-soft); font-weight: 400; }
+.card-title .sep { margin-left: 1px; }
+
+/* ===== Record cards: a prose table is a set of records ===== */
+.cards-head {
+  display: flex; flex-wrap: wrap; gap: 0 14px; margin: calc(var(--u) * 1.5) 0 6pt; padding-bottom: 3pt; border-bottom: 1px solid var(--line);
+  font-family: var(--sans); font-size: 7.5pt; line-height: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft);
+  break-after: avoid;
+}
+.cards-head span:not(:last-child)::after { content: "  ·"; color: var(--ink-soft); }
+.cards-head + .cards { margin-top: 0; }
+/* Cards two to a row. Neither a grid nor a multicol fragments predictably in Chrome's print
+ * path; a row is a plain block that moves whole, and a lone last card sits at half width. */
+.cards { margin: calc(var(--u) * 1.5) 0; }
+.card-row { display: flex; gap: 14px; margin: 0 0 var(--u); break-inside: avoid; }
+.card-row > .card { flex: 1 1 0; min-width: 0; }
+.card-row > .card:only-child { flex: 0 0 calc(50% - 7px); }
+/* A card is a container, not a status: the neutral ground and the ink-soft rule at its head — the
+ * record card's rule turned ninety degrees, so grid cards and stacked records share one
+ * vocabulary. A wire border at the weight of the column rule read as a fence, not a thing. */
+.card {
+  break-inside: avoid; border: 0; border-top: 2px solid var(--ink-soft); border-radius: 0 0 3px 3px;
+  padding: 8pt 12pt 10pt; background: var(--tint);
+}
+.card code { background: var(--paper); }
+.card-title { font-family: var(--sans); font-size: 10pt; line-height: 13pt; font-weight: 700; color: var(--ink); margin: 0 0 6pt; }
+.card-title code { font-size: 0.9em; }
+.card dl { margin: 0; }
+.card dt {
+  font-family: var(--sans); font-size: 7.5pt; line-height: 10pt; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-soft); margin: 6pt 0 1pt;
+}
+.card dt:first-child { margin-top: 0; }
+.card dd, .card p { margin: 0; font-size: 9.5pt; line-height: 13pt; }
+
+/* Stacked records: full width, fields in two columns, free to break when long. */
+.records { margin: calc(var(--u) * 1.5) 0; }
+.records .card { border: 0; border-left: 2px solid var(--ink-soft); border-radius: 0; padding: 2pt 0 4pt 12px; margin: 0 0 var(--u); max-width: 60em; background: var(--paper); }
+.records .card dl { column-count: 2; column-gap: 20px; }
+.records .card dl > * { break-inside: avoid; }
+.records .card dt:first-child { margin-top: 0; }
+.records .card.long { break-inside: auto; }
+.cards-head + .records { margin-top: 0; }
+
+/* ===== Definition list: a two-column term/meaning table ===== */
+.deflist-head {
+  display: flex; gap: 16px; margin: calc(var(--u) * 1.25) 0 4pt; padding-bottom: 3pt; border-bottom: 1px solid var(--line);
+  font-family: var(--sans); font-size: 7.5pt; line-height: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft);
+  break-after: avoid;
+}
+.deflist-head span:first-child::after { content: "  ·"; color: var(--ink-soft); }
+.deflist { margin: 0 0 calc(var(--u) * 1.25); }
+.deflist dt { font-family: var(--sans); font-weight: 700; font-size: 9.5pt; line-height: 13pt; margin: 7pt 0 1pt; break-after: avoid; }
+.deflist dt:first-child { margin-top: 0; }
+.deflist dt code { font-weight: 700; background: none; padding: 0; }
+.deflist dd { margin: 0; padding: 0 0 6pt; border-bottom: 1px solid var(--line-soft); break-inside: avoid; }
+.deflist dd:last-child { border-bottom: 0; }
+
+/* ===== Run-in list: named things, too long or too many for cards ===== */
+ul.runin, ol.runin { list-style: none; padding-left: 0; margin: var(--u) 0; }
+ul.runin > li, ol.runin > li { margin: 0 0 calc(var(--u) * 0.5); padding-left: 10px; border-left: 2px solid var(--ink-soft); break-inside: avoid; }
+/* A list inside a run-in item is an ordinary list: bullets, no rule of its own. */
+ul.runin li ul, ul.runin li ol, ol.runin li ul, ol.runin li ol { margin: 3pt 0 0; padding-left: 1.2em; }
+ul.runin li li, ol.runin li li { margin: 0 0 2pt; padding-left: 0; border-left: 0; }
+.runin-label { font-family: var(--sans); font-weight: 700; font-size: 9.5pt; }
+.runin-label code { font-weight: 700; }
+.kind-brief .runin > li, .kind-dashboard .runin > li { border-left: 0; padding-left: 0; }
+
+/* ===== Ladder: a run of bold-lead paragraphs, each with its fields ===== */
+.ladder { margin: var(--u) 0; }
+.rung { position: relative; margin: 0 0 calc(var(--u) * 0.75); padding-left: 12px; border-left: 2px solid var(--ink-soft); }
+/* A numbered ladder is a set of questions, each with parts inside it: the space between
+ * questions is wider than the space within one, and a hairline marks the boundary, so the set
+ * reads as separate questions and not one clump. The parts inside keep their own devices. */
+.ladder.numbered .rung { margin-bottom: calc(var(--u) * 1.25); padding-top: 6pt; border-top: 1px solid var(--line-soft); }
+.ladder.numbered .rung:first-child { border-top: 0; padding-top: 0; }
+.ladder.numbered .rung > p { padding-right: 6px; }
+.rung > p { margin: 0; }
+.rung-label { font-family: var(--sans); font-weight: 700; font-size: 9.5pt; }
+.rung-badge {
+  display: inline-block; min-width: 1.6em; margin-right: 5px; padding: 0 3px; text-align: center;
+  font-family: var(--sans); font-size: 8.5pt; line-height: 12pt; font-weight: 700;
+  color: var(--ink); background: var(--accent-bg); border-radius: 2px; vertical-align: 1px;
+}
+/* An item put to the reader (it carries a recommendation or a decision) is a card: a hairline
+ * frame, the number set large in accent at the top-left, the lead in sans. The recommendation's
+ * tint and the decision's blue then sit inside a visible container, and the eye finds where one
+ * item ends and the next begins without reading either. */
+.rung.ask {
+  margin: 0 0 calc(var(--u) * 1.25); padding: 8pt 10px 8pt 10px;
+  border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 0 3px 3px 0;
+  background: #fff;
+}
+.ladder.numbered .rung.ask, .ladder.numbered .rung.ask:first-child { border-top: 1px solid var(--line); padding-top: 8pt; }
+.rung.ask > p { padding-right: 0; }
+.rung.ask .rung-badge {
+  min-width: 0; margin-right: 8px; padding: 0; background: none;
+  font-size: 15pt; line-height: 14pt; letter-spacing: -0.02em; color: var(--accent); vertical-align: -1px;
+}
+.rung.ask .fields .answer, .rung.ask .fields .decision { margin-left: 0; }
+.fields { margin: 4pt 0 0; font-size: 9.5pt; line-height: 13pt; }
+.fields > div { margin: 0 0 3pt; }
+.fields dt { display: inline; font-family: var(--sans); font-weight: 700; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); margin-right: 4px; }
+.fields dt::after { content: ""; }
+.fields dd { display: inline; margin: 0; }
+/* Two fields are a comparison: side by side when the measure allows it (a single column),
+ * stacked inside a 3.65in column where a pair would be 27 characters wide. */
+.single .fields.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 14px; }
+.single .fields.pair dt { display: block; margin: 0 0 1pt; }
+.single .fields.pair dd { display: block; }
+.fields code { font-size: 0.9em; }
+/* Inside a rung, the answer is found the way a verdict is: the recommendation under an accent
+ * rule with its label in accent, the decision on the verdict panel's ground, a pending decision
+ * on no ground. Accent already means "the answer"; this carries that one meaning into a list.
+ * The answer's faint neutral ground is on trial — one line to remove if it washes. */
+.fields .answer, .fields .decision { display: block; margin: 4pt 0 0; padding: 3pt 10px 3pt 10px; border-radius: 0 3px 3px 0; }
+.fields .answer { border-left: 2px solid var(--accent); background: var(--tint); }
+.fields .decision { background: var(--accent-bg); }
+.fields .decision.pending { background: none; border-left: 2px solid var(--line); }
+.fields .answer dt, .fields .decision dt { color: var(--accent); }
+.fields .decision.pending dt { color: var(--ink-soft); }
+
+/* ===== Verdict panel: the answer, found without reading the section ===== */
+.verdict {
+  break-inside: avoid; margin: calc(var(--u) * 1.25) 0; padding: 10pt 14pt;
+  background: var(--accent-bg); border-left: 4px solid var(--accent); border-radius: 0 4px 4px 0;
+}
+.verdict-label {
+  display: block; font-family: var(--sans); font-size: 7.5pt; line-height: 10pt; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); margin-bottom: 3pt;
+}
+.verdict p { margin: 0; }
+
+/* ===== Callouts and pills (for hand-written editions) ===== */
+.callout { break-inside: avoid; margin: var(--u) 0; padding: 10pt 14pt; border-radius: 0 4px 4px 0; border-left: 4px solid; }
+.callout.note   { background: var(--blue-bg);   border-color: var(--blue); }
+.callout.good   { background: var(--green-bg);  border-color: var(--green); }
+.callout.warn   { background: var(--amber-bg);  border-color: var(--amber); }
+.callout.risk   { background: var(--red-bg);    border-color: var(--red); }
+.callout > :last-child { margin-bottom: 0; }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 9px; font-family: var(--sans); font-size: 7.5pt; line-height: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.pill.blue { background: var(--blue-bg); color: var(--blue); }
+.pill.green { background: var(--green-bg); color: var(--green); }
+.pill.amber { background: var(--amber-bg); color: var(--amber); }
+.pill.red { background: var(--red-bg); color: var(--red); }
+.pill.neutral { background: var(--tint); color: var(--ink-soft); }
+td .pill { font-size: 7pt; line-height: 10pt; padding: 0 6px; }
+
+/* ===== Print =====
+ * print-color-adjust keeps backgrounds and rules on paper. The break rules are what stop
+ * half-empty pages: a frame may break, the atoms inside it may not. */
+@media print {
+  html, body { background: #fff; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page, .landscape .page { width: auto; margin: 0; padding: 0; box-shadow: none; }
+  main { overflow-x: visible; }
+  .pagebreak { break-before: page; }
+  h3, h4, .opener, .deck, .figure-lead { break-after: avoid; }
+
+  table, tbody, pre, blockquote, .callout, .ladder, .cards { break-inside: auto; }
+  tr, thead, figure, .pullquote, .card, .verdict, .deflist dd, .runin li, .rung, .opener, .toc { break-inside: avoid; }
+  .card.long, .card-row.long, blockquote.long { break-inside: auto; }
+  /* A rung or item over about twelve lines may break rather than leave a third of a column empty. */
+  .rung.long, .runin li.long { break-inside: auto; orphans: 3; widows: 3; }
+  .rung.long .fields > div { break-inside: avoid; }
+  blockquote, .callout { orphans: 2; widows: 2; }
+
+  a { color: var(--ink); text-decoration: none; }
+
+  /* The folio: the title and the page number on one line at the foot; the head stays empty.
+   * Margin boxes cannot see custom properties, so the fonts and colours are literal, and the
+   * builder appends the @page rule carrying this edition's own title. */
+  @page {
+    size: letter;
+    margin: 0.58in 0.5in 0.55in;
+    @bottom-right {
+      font-family: "Segoe UI", "Trebuchet MS", Arial, sans-serif;
+      font-size: 7.5pt; letter-spacing: 0.04em; color: #5b6672; margin-top: 6pt;
+    }
+  }
+  @page :first { @bottom-right { content: ""; } }
+  /* A plate too tall for the portrait page takes a landscape page of its own: an 11in sheet. But
+   * the DOM is still laid out at the portrait .page's content width (7.5in) unless told otherwise,
+   * which clipped every plate-landscape figure at the narrower measure. Break it out to the
+   * landscape measure, centred under the narrower portrait page above and below it in the flow. */
+  @page plate { size: letter landscape; margin: 0.4in; }
+  .plate-page { width: 10.2in; position: relative; left: 50%; margin-left: -5.1in; }
+  .landscape { }
+}
+
+/* Dark screens only. The printed page is paper, and stays light. */
+@media (prefers-color-scheme: dark) {
+  html { background: #111; }
+}
+
+@media print { @page { @bottom-right { content: "Kitchen Sink Fixture  ·  " counter(page); } } }
+
+</style>
+</head>
+<body class="kind-brief sans-body single quiet-quotes">
+<div class="page">
+  <header class="masthead brief"><h1>Kitchen Sink Fixture</h1><div class="byline"><span>Printed 2026-09-22</span></div></header>
+  
+  
+  <main class="flow">
+<header class="opener" id="1-ladder-and-lone-leads"><span class="numeral">1.</span> <h2>Ladder and lone leads</h2></header>
+<p class="lead"><span class="runin-label">Cost:</span> low, within the existing budget for this quarter. <strong>Speed:</strong> fast enough for the nightly build to finish before morning. <strong>Safety:</strong> no destructive operation runs without a confirmation step first.</p>
+<p>A lone bold lead follows, on its own, outside any ladder run.</p>
+<p class="lead"><span class="runin-label">Note:</span> this single paragraph is not part of a ladder, just a labelled aside.</p>
+<header class="opener" id="2-fielded-and-card-lists"><span class="numeral">2.</span> <h2>Fielded and card lists</h2></header>
+<div class="ladder"><div class="rung"><p><span class="rung-label">Async workers:</span></p><dl class="fields pair"><div><dt>Was:</dt><dd>a single thread. </dd></div><div><dt>Is:</dt><dd>a pool of four workers.</dd></div></dl></div><div class="rung"><p><span class="rung-label">Retry policy:</span></p><dl class="fields pair"><div><dt>Was:</dt><dd>none. </dd></div><div><dt>Is:</dt><dd>three attempts with backoff.</dd></div></dl></div><div class="rung"><p><span class="rung-label">Logging:</span></p><dl class="fields pair"><div><dt>Was:</dt><dd>console only. </dd></div><div><dt>Is:</dt><dd>structured JSON to a file.</dd></div></dl></div></div>
+<section class="cards"><div class="card-row"><article class="card"><h5 class="card-title">Quick win:</h5><p> a short card body under the eight-item cap.</p></article><article class="card"><h5 class="card-title">Second win:</h5><p> another short card body for the grid.</p></article></div><div class="card-row"><article class="card"><h5 class="card-title">Third win:</h5><p> a third short card body closing the grid.</p></article></div></section>
+<header class="opener" id="3-tables"><span class="numeral">3.</span> <h2>Tables</h2></header>
+<div class="deflist-head"><span>Term</span><span>Meaning</span></div><dl class="deflist"><dt>Backoff</dt><dd>A delay that grows between retries so a failing dependency is not hammered</dd><dt>Idempotent</dt><dd>An operation that is safe to run more than once with the same result</dd></dl>
+<div class="deflist-head"><span>Name</span><span>Notes</span></div><dl class="deflist"><dt>Northgate</dt><dd>A long paragraph of notes describing the northgate rollout in enough detail to push this row over the threshold that turns a table into a set of record cards instead of a plain lookup table, since the point of this fixture row is exercising that exact renderer path.</dd><dt>Southgate</dt><dd>Another long paragraph of notes describing the southgate rollout in enough detail to push this row over the same threshold, again on purpose, so the record-card renderer sees more than one row to lay out side by side.</dd></dl>
+<blockquote><p>A closing blockquote, after the first section, so it renders as a quote rather than a colophon.</p></blockquote>
+  </main>
+</div>
+
+</body>
+</html>

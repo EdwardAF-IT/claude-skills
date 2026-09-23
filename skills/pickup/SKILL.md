@@ -54,7 +54,7 @@ written, and names the other sessions on this checkout — then stops and waits.
    - the next step the note proposes
 
    Then stop. Do not start the next step until the user says so — except between 21:00 and 07:00
-   local, when [[nights-are-for-work-days-are-edwards]] applies: take the first next step and
+   local, when self-directed work continues without waiting on him: take the first next step and
    record it.
 
 ## Rules

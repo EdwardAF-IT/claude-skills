@@ -1,0 +1,15 @@
+{
+  "_comment": "One presence rule, two gates: diagram audit.py token_present and edit prose_audit.py present must give every case here the same verdict. See scripts/presence.py for the rule and why.",
+  "cases": [
+    { "fact": "woDetail.Installer_ID", "after": "The service returns the Installer_ID field.", "kept": true,
+      "why": "the receiver is a local variable; the field name survives" },
+    { "fact": "Customer_ID", "after": "The service returns woDetail.Customer_ID.", "kept": true,
+      "why": "the whole fact is present inside a longer path" },
+    { "fact": "Maestro.Orchestra.Execution", "after": "The Execution namespace runs the job.", "kept": false,
+      "why": "a namespace qualifier is part of the name" },
+    { "fact": "Console.WriteLine", "after": "It calls WriteLine for each row.", "kept": false,
+      "why": "a type qualifier is part of the name" },
+    { "fact": "order.Id", "after": "It returns the Id of the row.", "kept": false,
+      "why": "a short plain member says nothing alone" }
+  ]
+}
