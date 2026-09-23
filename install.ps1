@@ -201,7 +201,10 @@ if ((Test-Path $oldResume) -and ($newManifest -notcontains 'resume'))
 }
 
 Write-Host ''
-Say ($count.ToString() + ' skills in ' + $dest)
+# The published version, so someone asked "which do you have?" can answer with one line.
+$versionFile = Join-Path $stage 'version'
+$version = if (Test-Path $versionFile) { ' (version ' + (Get-Content $versionFile -TotalCount 1).Trim() + ')' } else { '' }
+Say ($count.ToString() + ' skills in ' + $dest + $version)
 
 $policy = Get-ExecutionPolicy
 if ($policy -in @('Restricted', 'Undefined', 'AllSigned'))

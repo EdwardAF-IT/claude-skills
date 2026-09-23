@@ -137,6 +137,9 @@ then
   say "removed resume (renamed to pickup)"
 fi
 
-echo; say "$n skills in $DEST"
+# The published version, so someone asked "which do you have?" can answer with one line.
+version=""
+[ -f "$STAGE/version" ] && version=" (version $(head -n 1 "$STAGE/version" | tr -d '[:space:]'))"
+echo; say "$n skills in $DEST$version"
 [ -f "$HOME/.claude/.credentials.json" ] || say 'next: run "claude" and sign in when it asks'
 echo

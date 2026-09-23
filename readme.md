@@ -19,7 +19,8 @@ curl -fsSL https://raw.githubusercontent.com/EdwardAF-IT/claude-skills/main/inst
 ```
 
 It installs what is missing (git, Node, Python, Graphviz, Claude Code, mermaid-cli,
-highlight.js) and puts the skills in `~/.claude/skills`. Run the same line again to update.
+highlight.js) and puts the skills in `~/.claude/skills`. Run the same line again to update; its
+last line names the version you now have (the `version` file here, tagged `v1.0.0` and up).
 Nothing else under `~/.claude` is touched. First time: open a new window, run `claude`, sign in.
 
 ## Use
