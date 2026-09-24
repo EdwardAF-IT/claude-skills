@@ -270,7 +270,9 @@ Never mark a disposition on his behalf. A finding nobody has ruled on stays open
 
 - **Never fix anything.** This skill reviews. Remediation is a separate instruction, and he wants to
   choose what gets remediated.
-- Never file work items off an unreviewed round; he decides what becomes a task.
+- Never file work items off an unreviewed round; he decides what becomes a task. When he does, a
+  title is a two-to-five-word label for the topic ("Review round 2 fixes"), never a sentence
+  about the round, and never a hash, id or count; the description carries the detail.
 - Do not review a diff — that is `/code-review`. Coherence in particular is meaningless diff-scoped:
   diff review is exactly how systemic drift survives.
 - Respect the repo's own policy file over this skill for anything project-specific.
