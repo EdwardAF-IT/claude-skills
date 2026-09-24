@@ -15,6 +15,16 @@ def run(*args):
 
 CASES = [
     # name, args, expected exit, must-appear regexes, must-not-appear regexes
+    ("a titled, captioned figure has no label finding",
+     ["check", "labels-good.md"], 0, [r"labels-good\.md#0"], [r"untitled", r"uncaptioned", r"generic-title", r"long-caption"]),
+    ("a figure with no title and no caption is two blockers",
+     ["check", "labels-missing.md"], 2, [r"\[blocker\] untitled:", r"\[blocker\] uncaptioned:"], []),
+    ("a title that names only the kind of picture, and a long caption, are blockers",
+     ["check", "labels-generic.md"], 2, [r"\[blocker\] generic-title:", r"\[blocker\] long-caption: caption is 17 words"], [r"untitled"]),
+    ("a caption that repeats the title is a warning",
+     ["check", "labels-repeat.md"], 1, [r"\[warning\] caption-repeats-title"], [r"blocker"]),
+    ("a raw .mmd carries no title or caption of its own; the embedding document does",
+     ["check", "edges.mmd"], None, [r"edges\.mmd#0"], [r"untitled", r"uncaptioned"]),
     ("edge with labelled source is seen", ["graph", "edges.mmd"], 0, [r'"from": "A",\s*"to": "B"', r'"endpoint"', r'"classifier"'], []),
     ("deleted arrow is CHANGED", ["diff", "edges.mmd", "edges-arrow-deleted.mmd"], 1, [r"relationships removed\s*: \[\('A', 'B', 0\)\]"], [r"VERDICT: IDENTICAL", r"entities removed\s*:\s*\["]),
     ("same file is IDENTICAL", ["diff", "edges.mmd", "edges-same.mmd"], 0, [r"before: 20 entities, 15 relationships", r"IDENTICAL"], []),
@@ -74,7 +84,7 @@ bad = 0
 for name, args, want_exit, must, must_not in CASES:
     code, out = run(*args)
     misses = [m for m in must if not re.search(m, out)] + [f"unexpected {m}" for m in must_not if re.search(m, out)]
-    ok = code == want_exit and not misses
+    ok = (want_exit is None or code == want_exit) and not misses   # None: the exit is not the point
     bad += not ok
     print(f"{'PASS' if ok else 'FAIL'}  exit {code} (want {want_exit})  {name}")
     for m in misses:
@@ -155,6 +165,14 @@ def tall_figure_measures_what_the_magazine_prints():
             assert rep["label_pt_at_target"] < 7.0 and "illegible" in out and "placed as" in out, out
 
 
+def labels_match_the_shared_answer():
+    """Every tool reads a figure's title and caption the same way (fences.json figureLabels)."""
+    audit = _load_audit()
+    want = json.loads((FENCES / "labels.expected.json").read_text(encoding="utf-8"))["labels"]
+    got = [{"title": t, "caption": c} for t, c in audit.figure_labels(FENCES / "labels.md")]
+    assert got == want, got
+
+
 def audit_keeps_no_copy_of_the_magazine_page():
     """The magazine's page lives in the builder; a second copy here once measured a tall figure at
     12pt while the edition printed it at 4.2pt. The magazine target has no width of its own."""
@@ -166,6 +184,7 @@ def audit_keeps_no_copy_of_the_magazine_page():
 
 CHECKS = [
     ("every fence shape gets the shared answer (fences.json, tests/fences)", fences_match_the_shared_answer),
+    ("every figure's title and caption get the shared answer (tests/fences/labels)", labels_match_the_shared_answer),
     ("audit.py keeps no copy of the magazine page; the builder places every figure", audit_keeps_no_copy_of_the_magazine_page),
     ("a tall figure measures at the size the magazine prints it, not its width-only size", tall_figure_measures_what_the_magazine_prints),
     ("one presence rule with the edit gate: every shared case gets the same verdict", presence_matches_the_shared_cases),

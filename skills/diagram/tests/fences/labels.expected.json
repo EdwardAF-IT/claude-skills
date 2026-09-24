@@ -1,0 +1,9 @@
+{
+  "_comment": "The title and caption every tool must read for each diagram fence in labels.md, in order, as figureLabels in fences.json defines them. null where there is none. Checked by the diagram self-test and magazine's node tests.",
+  "labels": [
+    { "title": "How a request reaches the database", "caption": "A request passes through the API to the database." },
+    { "title": "A title in underscores, two blank lines above the fence", "caption": "A caption in underscores, two blank lines below." },
+    { "title": null, "caption": null },
+    { "title": null, "caption": null }
+  ]
+}

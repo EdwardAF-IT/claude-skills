@@ -160,6 +160,9 @@ class DiagramReport:
     structural_pt: float = 0.0           # the best any label can do given the diagram's fixed geometry
     structural_reason: str = ""          # what fixes that geometry ("6 participants")
     placement: str = ""                  # magazine target only: the builder's placement class
+    in_document: bool = False            # a figure in a .md, which must carry a title and caption
+    title: str | None = None             # the bold line just above the fence
+    caption: str | None = None           # the italic line just below it
     layout_defects: list[str] = field(default_factory=list)  # overflow and strike-through, measured
     label_pt_at_target: float = 0.0      # smallest node/edge/member text at the target width
     smallest_text_pt: float = 0.0        # smallest text of any role, for the record
@@ -179,6 +182,16 @@ class DiagramReport:
 
 
 # ----------------------------------------------------------------- extraction
+
+def figure_labels(path: Path) -> list[tuple[str | None, str | None]] | None:
+    """(title, caption) for each diagram in a markdown document, in extract_diagrams' order;
+    None for a raw .mmd/.dot, whose title and caption live in the document that embeds it."""
+    if path.suffix.lower() in (".mmd", ".mermaid", ".dot", ".gv"):
+        return None
+    text = path.read_text(encoding="utf-8", errors="replace")
+    lines = fences.split_lines(text)
+    return [fences.labels(lines, f) for f in fences.scan(text) if f.diagram]
+
 
 def extract_diagrams(path: Path) -> list[tuple[int, str, bool]]:
     """Return (index, source, was_fenced) for every diagram in a file.
@@ -1090,6 +1103,41 @@ def _check_measure_status(rep: DiagramReport) -> bool:
     return True
 
 
+# A title that names only the kind of picture tells the reader nothing the picture does not.
+GENERIC_TITLE = re.compile(
+    r"^(?:(?:figure|fig\.?|diagram|chart|graph|image|picture)\s*\d*|"
+    r"(?:the\s+)?(?:flow\s*chart|flowchart|flow|overview|architecture|sequence(?:\s+diagram)?|"
+    r"class\s+diagram|state\s+diagram|er\s+diagram|data\s+model|process|workflow))\s*[:.]?$",
+    re.I)
+TITLE_MIN_WORDS = 3        # fewer is a label, not a statement of what the diagram shows
+
+
+def _check_title_and_caption(rep: DiagramReport) -> None:
+    """A figure in a document says what it is (a title) and what it shows (a caption); a reader
+    should never have to work out from the picture what it is a picture of."""
+    if not rep.in_document:
+        return
+    if not rep.title:
+        rep.add("blocker", "untitled",
+                "no title: put one bold line just above the diagram that names what the reader "
+                "learns from it (\"How a work item moves from triage to done\")")
+    elif GENERIC_TITLE.match(rep.title) or words(rep.title) < TITLE_MIN_WORDS:
+        rep.add("blocker", "generic-title",
+                f"title \"{rep.title}\" names the kind of picture, not what it shows; say what "
+                f"the reader learns from it, in {TITLE_MIN_WORDS} words or more")
+    if not rep.caption:
+        rep.add("blocker", "uncaptioned",
+                f"no caption: put one italic line just below the diagram, under "
+                f"{fences.CAPTION_MAX_WORDS + 1} words, saying what it shows")
+    elif words(rep.caption) > fences.CAPTION_MAX_WORDS:
+        rep.add("blocker", "long-caption",
+                f"caption is {words(rep.caption)} words; keep it under {fences.CAPTION_MAX_WORDS + 1} "
+                f"— the title and prose carry the rest")
+    elif rep.title and rep.caption.strip(" .").lower() == rep.title.strip(" .").lower():
+        rep.add("warning", "caption-repeats-title",
+                "the caption repeats the title; say what the reader sees in the diagram instead")
+
+
 def _check_legibility(rep: DiagramReport, target: str) -> None:
     """Legibility, the thing that costs him manual labour."""
     if rep.label_pt_at_target < LABEL_FLOOR_PT:
@@ -1202,6 +1250,7 @@ def assess(rep: DiagramReport, src: str, target: str, render_error: str) -> None
     Each rule is its own small function; this is just their call order."""
     _check_target_mechanics(rep, src, target)
     _check_init_directive(rep, src)
+    _check_title_and_caption(rep)
     _check_parse_status(rep)
     if not _check_render_status(rep, render_error):
         return
@@ -1266,10 +1315,14 @@ def analyse(path: Path, target: str, workdir: Path, kind: str | None = None) -> 
             raise SystemExit(f"audit.py: the magazine target needs the magazine skill beside this one ({MAGAZINE_BUILD} is missing)")
         config_file, config, config_error = magazine_mermaid_config(workdir)
     actor_w, actor_gap, font_px = _sequence_geometry(config)
+    labels = figure_labels(path)
     for index, src, fenced in extract_diagrams(path):
         if not src.strip():
             continue
         rep = DiagramReport(path=str(path), index=index)
+        if labels is not None:
+            rep.in_document = True
+            rep.title, rep.caption = labels[index]
         if fenced:
             rep.add("warning", "fenced-mmd",
                     "a .mmd holds raw mermaid source; this one is wrapped in a markdown "

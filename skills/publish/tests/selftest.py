@@ -160,6 +160,15 @@ def _():
     assert new is not None and new.group(1) == 'a doc with spaces.md#0', new
 
 
+@case('a figure without a title or caption turns the diagram stage red, ticketed to diagram')
+def _():
+    code, out = run_cli('board', str(FIXTURES / 'untitled.md'), '--no-build')
+    assert code != 0, out
+    assert '[RED  ] diagram' in out, out
+    assert 'diagram -> diagram: untitled' in out, out
+    assert 'diagram -> diagram: uncaptioned' in out, out
+
+
 @case('the happy path: a clean document with no --before is every-stage green (real tools)')
 def _():
     code, out = run_cli('board', str(FIXTURES / 'happy.md'), '--no-build')

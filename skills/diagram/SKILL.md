@@ -147,6 +147,33 @@ paragraph that lost its way; a sentence on an arrow is worse. Notes and titles a
 and are exempt from the three words, but a note over twenty words is a paragraph and the audit
 warns (`long-note`): it belongs in the document.
 
+**Every figure has a title and a caption.** A pretty diagram whose subject the reader has to
+guess has failed before its first label is read. Both are plain markdown, so every surface — a
+wiki, GitHub, the printed magazine — shows them:
+
+````markdown
+**How a work item moves from triage to done**
+
+```mermaid
+...
+```
+
+*Every state a work item passes through, and who moves it.*
+````
+
+- **The title** is one bold line just above the fence. It names what the reader *learns*, not
+  what kind of picture it is: "How a work item moves from triage to done", never "Workflow",
+  "Architecture" or "Figure 3". Write it as the question the diagram answers, turned into a
+  statement. Three words at the least; the audit refuses a shorter or generic title
+  (`untitled`, `generic-title`), but only a reader can judge whether it is *thoughtful* — ask
+  whether someone who saw only the title would know why the figure is there.
+- **The caption** is one italic line just below the fence, **under 15 words**, saying what the
+  reader will see: the subject, and the one thing to notice. It is not the title again
+  (`caption-repeats-title`) and not a paragraph (`long-caption`); detail belongs in the prose.
+- A raw `.mmd` has no title or caption of its own; the document that embeds it carries them.
+- When fixing a diagram, fixing a missing or generic title and caption is part of the job, done
+  first — a reader told what they are looking at forgives a great deal else.
+
 **A redraw may change type, direction, engine and styling. It may not change what the diagram
 asserts.** Run `diff` before and after: same entities, same relationships, same members. A lost
 node is a lost fact; so is a status code that lived in a label and now lives in a `%%` comment the
@@ -208,8 +235,9 @@ back to that path on their own, and a shell that calls `dot` directly needs
    of actors, a set of states, a structure described through nested prose. Be restrained: **at most
    one new figure per section** unless the section is a walkthrough, and only where the relationship
    is genuinely hard to hold in prose.
-5. **Minor prose edits are allowed** to introduce a figure and refer back to it. A figure nobody
-   introduces is an orphan and counts as a defect. Do not rewrite beyond those sentences.
+5. **Minor prose edits are allowed** to introduce a figure and refer back to it, and to give
+   every figure its title and caption. A figure nobody introduces is an orphan and counts as a
+   defect. Do not rewrite beyond those sentences.
 6. **Report** what changed, what was left alone and why, any diagram that could not be made
    legible at its target with the reason, and any diff that was UNVERIFIABLE.
 

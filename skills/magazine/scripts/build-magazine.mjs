@@ -127,6 +127,35 @@ function scanFences(lines) {
 
 const splitLines = (md) => md.replace(/\r\n?/g, '\n').split('\n');
 
+// A figure's title and caption: figureLabels in the same fences.json, mirroring the diagram
+// skill's fences.labels; tests/fences/labels pins both tools to one answer.
+const FIGURE_TITLE = new RegExp(FENCE_SPEC.figureLabels.title);
+const FIGURE_CAPTION = new RegExp(FENCE_SPEC.figureLabels.caption);
+
+// The one-line paragraph next to line i in direction step (blank lines between allowed), when
+// the whole paragraph matches pattern: { text, line }, else null.
+function loneLine(lines, i, step, pattern) {
+  let k = i + step;
+  while (k >= 0 && k < lines.length && !lines[k].trim()) k += step;
+  if (k < 0 || k >= lines.length) return null;
+  const beyond = k + step;
+  if (beyond >= 0 && beyond < lines.length && lines[beyond].trim()) return null;   // a longer paragraph
+  const m = lines[k].match(pattern);
+  return m ? { text: (m[1] || m[2]).trim(), line: k } : null;
+}
+
+/**
+ * The title (bold line just above) and caption (italic line just below) of a diagram fence.
+ * @param {string[]} lines  the document, split by splitLines
+ * @param {{start: number, end: number}} fence  a fence from fenceAt/scanFences
+ * @returns {{title: {text: string, line: number} | null, caption: {text: string, line: number} | null}}
+ */
+function figureLabels(lines, fence) {
+  const title = loneLine(lines, fence.start, -1, FIGURE_TITLE);
+  const caption = fence.end < lines.length ? loneLine(lines, fence.end, +1, FIGURE_CAPTION) : null;
+  return { title, caption };
+}
+
 // ---------------------------------------------------------------- document kinds
 //
 // One decision per build, made from the document's own shape and overridable by flag. Everything
@@ -289,8 +318,16 @@ function parseBlocks(md, ctx) {
     const fence = fenceAt(lines, i);
     if (fence) {
       const body = lines.slice(i + 1, fence.end).join('\n');
-      i = fence.end + 1;
-      out.push(fence.engine ? { k: 'figure', src: body, engine: fence.engine } : { k: 'code', lang: fence.lang, body });
+      if (!fence.engine) {
+        out.push({ k: 'code', lang: fence.lang, body });
+        i = fence.end + 1;
+        continue;
+      }
+      const { title, caption } = figureLabels(lines, fence);
+      const last = out[out.length - 1];
+      if (title && last && last.k === 'p' && last.raw.trim() === lines[title.line].trim()) out.pop();
+      out.push({ k: 'figure', src: body, engine: fence.engine, title: title ? title.text : null, caption: caption ? caption.text : null });
+      i = caption ? caption.line + 1 : fence.end + 1;
       continue;
     }
 
@@ -822,7 +859,7 @@ function handleParagraph(b, i, blocks, kind, ctx, em, span) {
   if (nxt && nxt.k === 'figure' && isFigureLead(b)) {
     const leadHtml = `<p class="figure-lead">${inline(b.raw)}</p>`;
     const leadIn = ((Math.ceil(stripMd(b.raw).length / 100) + 0.5) * 11.5 + 8) / 72;
-    em.push(renderFigure(nxt.src, ctx, kind, leadHtml, leadIn, nxt.engine), true);
+    em.push(renderFigure(nxt, ctx, kind, { html: leadHtml, inches: leadIn }), true);
     return i + 1;
   }
 
@@ -922,7 +959,7 @@ function structure(blocks, kind, ctx) {
       case 'list': handleList(b, kind, span, em); continue;
       case 'table': handleTable(b, kind, span, em); continue;
       case 'code': handleCode(b, kind, em); continue;
-      case 'figure': em.push(renderFigure(b.src, ctx, kind, '', 0, b.engine), true); continue;
+      case 'figure': em.push(renderFigure(b, ctx, kind), true); continue;
       case 'quote': handleQuote(b, kind, ctx, span, em); continue;
       case 'hr': em.push('<hr>'); continue;
       default: continue;
@@ -1349,18 +1386,31 @@ function flipDirection(src) {
   return src.replace(m[0], `${m[1]}${to}`);
 }
 
-function renderFigure(rawSrc, ctx, kind, leadHtml = '', leadIn = 0, engine = 'mermaid') {
+// The height a figure's title and caption take on the page, in inches, estimated from their
+// length the way the lead-in's is: lines at a typical column width, times the line height.
+const TITLE_CHARS_PER_LINE = 55;     // 10pt sans across a column
+const CAPTION_CHARS_PER_LINE = 70;   // 8.5pt italic across a column
+const labelLinesIn = (text, charsPerLine, leadingPt, gapPt) =>
+  text ? (Math.ceil(stripMd(text).length / charsPerLine) * leadingPt + gapPt) / 72 : 0;
+
+function renderFigure(fig, ctx, kind, lead = { html: '', inches: 0 }) {
+  const engine = fig.engine || 'mermaid';
   const dot = engine === 'graphviz';
-  const src = dot ? rawSrc : normaliseMermaid(rawSrc, ctx);
+  const src = dot ? fig.src : normaliseMermaid(fig.src, ctx);
   const n = ctx.figure++;
-  const label = `${leadHtml}<span class="figure-label">Figure ${n}</span>`;
+  const titleHtml = fig.title ? `<p class="figure-title">${inline(fig.title)}</p>` : '';
+  const captionHtml = fig.caption ? `<figcaption class="figure-caption">${inline(fig.caption)}</figcaption>` : '';
+  const label = `${lead.html}<span class="figure-label">Figure ${n}</span>${titleHtml}`;
+  const chromeIn = lead.inches
+    + labelLinesIn(fig.title, TITLE_CHARS_PER_LINE, 13, 3)
+    + labelLinesIn(fig.caption, CAPTION_CHARS_PER_LINE, 11.5, 4);
 
   if (ctx.mermaid === 'code') {
-    return `<figure class="full">${label}<pre><code>${esc(src)}</code></pre></figure>`;
+    return `<figure class="full">${label}<pre><code>${esc(src)}</code></pre>${captionHtml}</figure>`;
   }
   if (ctx.mermaid === 'cdn') {
     ctx.needsMermaidCdn = true;
-    return `<figure class="diagram full">${label}<pre class="mermaid">${esc(src)}</pre></figure>`;
+    return `<figure class="diagram full">${label}<pre class="mermaid">${esc(src)}</pre>${captionHtml}</figure>`;
   }
 
   if (dot && !findDot()) {
@@ -1373,12 +1423,12 @@ function renderFigure(rawSrc, ctx, kind, leadHtml = '', leadIn = 0, engine = 'me
     const svg = dot ? renderDotSvg(source, n, suffix) : renderMermaidSvg(source, n, suffix, mermaidConfigFile(ctx.shared));
     const size = svgSize(svg);
     const label = dot ? dotLabelSize(svg) : labelPx();
-    return size ? { svg, size, place: placePlate(size, label, kind, leadIn) } : { svg, size: null };
+    return size ? { svg, size, place: placePlate(size, label, kind, chromeIn) } : { svg, size: null };
   };
   let best = attempt(src, '');
   if (!best.size) {
     ctx.warnings.push(`figure ${n}: the SVG has no viewBox; printed at the full measure`);
-    return `<figure class="diagram full">${label}${best.svg}</figure>`;
+    return `<figure class="diagram full">${label}${best.svg}${captionHtml}</figure>`;
   }
   if (best.place.labelPt < PAGE.labelTargetPt && ctx.diagramDirection !== 'keep') {
     const flipped = dot ? flipDotDirection(src) : flipDirection(src);
@@ -1395,7 +1445,7 @@ function renderFigure(rawSrc, ctx, kind, leadHtml = '', leadIn = 0, engine = 'me
   if (place.labelPt < PAGE.labelFloorPt) {
     ctx.warnings.push(`figure ${n}: labels print at ${place.labelPt.toFixed(1)}pt even as a ${place.cls.includes('landscape') ? 'landscape' : 'portrait'} plate in either direction (native ${Math.round(size.w)}x${Math.round(size.h)}); the diagram needs fewer nodes per rank or shorter labels to reach ${PAGE.labelFloorPt}pt`);
   }
-  return `<figure class="${place.cls}" data-h="${place.boxH.toFixed(2)}">${label}${svg}</figure>`;
+  return `<figure class="${place.cls}" data-h="${place.boxH.toFixed(2)}">${label}${svg}${captionHtml}</figure>`;
 }
 
 function mkdtempWorkdir() {
@@ -1747,6 +1797,6 @@ if (isMain) main();
 
 export {
   parseArgs, build, verifyEdition, editionText, extractCells, normalise, renderSub, renderList, printedDate,
-  parseBlocks, scanFences, splitLines, paletteOf, mermaidConfig, actorHues, PORTRAIT, LANDSCAPE, GEOMETRY,
+  parseBlocks, scanFences, splitLines, figureLabels, paletteOf, mermaidConfig, actorHues, PORTRAIT, LANDSCAPE, GEOMETRY,
   DEFAULT_CSS, MERMAID_THEME,
 };

@@ -71,6 +71,34 @@ def fence_at(lines: list[str], i: int) -> Fence | None:
     return Fence(i, j, run, lang, DIAGRAM_LANGS.get(lang.lower()))
 
 
+_LABELS = _SPEC["figureLabels"]
+_TITLE = re.compile(_LABELS["title"])
+_CAPTION = re.compile(_LABELS["caption"])
+CAPTION_MAX_WORDS: int = _LABELS["captionMaxWords"]
+
+
+def _lone_line(lines: list[str], i: int, step: int, pattern: re.Pattern) -> str | None:
+    """The text of the one-line paragraph next to line `i` in direction `step` (blank lines
+    between allowed), when that whole paragraph matches `pattern`; else None."""
+    k = i + step
+    while 0 <= k < len(lines) and not lines[k].strip():
+        k += step
+    if not 0 <= k < len(lines):
+        return None
+    beyond = k + step
+    if 0 <= beyond < len(lines) and lines[beyond].strip():
+        return None          # a longer paragraph, not a label
+    m = pattern.match(lines[k])
+    return (m.group(1) or m.group(2)).strip() if m else None
+
+
+def labels(lines: list[str], fence: Fence) -> tuple[str | None, str | None]:
+    """(title, caption) of a diagram fence, as figureLabels in fences.json defines them."""
+    title = _lone_line(lines, fence.start, -1, _TITLE)
+    caption = _lone_line(lines, fence.end, +1, _CAPTION) if fence.end < len(lines) else None
+    return title, caption
+
+
 def scan(text: str) -> list[Fence]:
     """Every fence in a document, in order."""
     lines = split_lines(text)

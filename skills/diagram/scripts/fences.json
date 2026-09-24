@@ -10,5 +10,11 @@
     "mermaid": "mermaid",
     "dot": "graphviz",
     "graphviz": "graphviz"
+  },
+  "figureLabels": {
+    "_comment": "A diagram's title and caption, in plain markdown so every surface renders them: the title a paragraph of one line, entirely bold, just above the fence; the caption a paragraph of one line, entirely italic, just below. Blank lines between are allowed. The diagram gate requires both; the magazine prints them with the plate.",
+    "title": "^[ \\t]*(?:\\*\\*(?!\\*)(.+?)\\*\\*|__(?!_)(.+?)__)[ \\t]*$",
+    "caption": "^[ \\t]*(?:\\*(?![*\\s])(.+?)\\*|_(?![_\\s])(.+?)_)[ \\t]*$",
+    "captionMaxWords": 14
   }
 }

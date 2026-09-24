@@ -348,6 +348,16 @@ figure.diagram:not(.full) { margin: var(--u) 0; }
   display: block; text-align: left; font-family: var(--sans); font-size: 7.5pt; line-height: 10pt;
   font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-soft);
 }
+/* Every plate says what it is and what it shows: its title under the number, its caption below.
+ * Both are reading text, so true black. */
+.figure-title {
+  font-family: var(--sans); font-size: 10pt; line-height: 13pt; font-weight: 700;
+  color: var(--text); margin: 1pt 0 2pt; text-align: left; text-wrap: balance;
+}
+.figure-caption {
+  font-family: var(--body-font); font-size: 8.5pt; line-height: 11.5pt; font-style: italic;
+  color: var(--text); margin: 4pt 0 0; text-align: left;
+}
 /* The paragraph that introduces a plate, in its own place, set as its caption. */
 .figure-lead { font-family: var(--sans); font-size: 8.5pt; line-height: 11.5pt; color: var(--ink-soft); margin: 0 0 4pt; max-width: 52em; text-align: left; break-after: avoid; }
 .figure-lead code { font-size: 0.95em; }
