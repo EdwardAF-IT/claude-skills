@@ -6,6 +6,10 @@
 // Regenerated 2026-09-22 on purpose when the palette moved to :root: the only change is the
 // inlined stylesheet's :root gaining --ink-faint, --teal/--teal-bg, the pie second shades and a
 // comment. Rendered content is byte-identical.
+// Regenerated 2026-10-07 on purpose when `pre` lost its hanging indent (text-indent applied to
+// the first line only, so line one of every multi-line block sat left of the rest) and the
+// uncommitted --run-on work added `.run-on .opener.doc-start`: the only changes are those two
+// stylesheet rules and the `pre` comment. Rendered content is byte-identical.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';

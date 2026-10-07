@@ -74,5 +74,7 @@ He can stop at any point ("that's enough", "later"). When he does, or when the q
 
 - One question per call, always. This skill exists because batching is what he does not want.
 - Never re-ask something already answered this session or already recorded as a decision.
+- Ask first; research only to apply an answer. No board queries or checks that an item is still
+  open before asking — offer "Already handled" as an option instead.
 - Never use this during unattended work — it is the opposite of the night rule.
 - Brevity applies here as everywhere: he asks for detail when he wants it.

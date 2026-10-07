@@ -30,6 +30,7 @@
  *   --sans-body
  *   --landscape           Force landscape (a table of 8+ columns forces it anyway)
  *   --toc / --no-toc      Force the contents block on or off
+ *   --run-on              Later documents continue on the same page instead of starting a new one
  *   --accent "#2456a6"    Accent colour
  *   --mermaid <mode>      mmdc (default; a build error when mmdc is missing) | cdn | code
  *   --diagram-direction   auto (default) transposes a wide LR flowchart to TD when that helps;
@@ -216,6 +217,7 @@ function parseArgs(argv) {
       case '--landscape': o.landscape = true; break;
       case '--toc': o.toc = true; break;
       case '--no-toc': o.toc = false; break;
+      case '--run-on': o.runOn = true; break;
       case '--accent': o.accent = val(); break;
       case '--mermaid': o.mermaid = val(); break;
       case '--diagram-direction': o.diagramDirection = val(); break;
@@ -1659,6 +1661,7 @@ function build(opts) {
     kind.columns ? 'columned' : 'single',
     landscape ? 'landscape' : '',
     quietQuotes ? 'quiet-quotes' : '',
+    opts.runOn ? 'run-on' : '',
   ].filter(Boolean).join(' ');
 
   const tocEntry = (t) => `<li><span class="toc-num">${t.num ? esc(t.num) : ''}</span><a href="#${t.id}">${inline(t.text)}</a></li>`;

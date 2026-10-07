@@ -172,6 +172,7 @@ main > * { max-width: 100%; }
 .kind-brief .opener .numeral, .kind-dashboard .opener .numeral { font-size: 20pt; }
 .opener.doc-start { break-before: page; margin-top: 0; }
 .opener.doc-start.first { break-before: auto; }
+.run-on .opener.doc-start { break-before: auto; margin-top: calc(var(--u) * 3); }
 .opener.doc-start h2 { font-size: 24pt; line-height: 28pt; }
 
 /* The deck: the section's point, across the measure, before the columns start. */
@@ -318,7 +319,9 @@ code { font-family: var(--mono); font-size: 0.85em; color: var(--text); backgrou
 td code, .card code, .deflist code, .fields code { background: var(--tint); padding: 0.05em 0.3em; border-radius: 2px; }
 pre {
   background: var(--tint); border: 1px solid var(--line-soft); border-radius: 3px;
-  padding: 8pt 10pt 8pt 2.5em; text-indent: -1.5em;
+  /* No hanging indent: text-indent applies only to a block's first line, so in a multi-line
+     block it pushed line one out past every line under it. */
+  padding: 8pt 10pt;
   font-family: var(--mono); font-size: 7.5pt; line-height: 10.5pt;
   margin: calc(var(--u) * 1.5) 0;
   white-space: pre-wrap; overflow-wrap: break-word; max-width: 100%;
