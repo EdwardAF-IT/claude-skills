@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 
 def run(args, check=True):
@@ -73,15 +74,25 @@ def azure_prs(url, me):
             "my_vote_pending": not mine or all(v == 0 for v in mine),
             "priority": None,
             "kind": None,
+            "org_url": org_url,
         })
-    for pr in prs:
-        items = run(["az", "repos", "pr", "work-item", "list", "--id", str(pr["id"]), "--org", org_url,
+    return prs
+
+
+def azure_work_items(ready):
+    """Fills priority and type from each ready PR's first linked work item, in parallel.
+
+    Only ready PRs are looked up: each lookup is one slow az call, and the open-but-not-ready PRs
+    never need an order."""
+    def lookup(pr):
+        items = run(["az", "repos", "pr", "work-item", "list", "--id", str(pr["id"]), "--org", pr["org_url"],
                      "-o", "json"], check=False)
         for item in json.loads(items or "[]")[:1]:
             fields = item.get("fields", {})
             pr["priority"] = fields.get("Microsoft.VSTS.Common.Priority")
             pr["kind"] = fields.get("System.WorkItemType")
-    return prs
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lookup, ready))
 
 
 def github_prs(me):
@@ -112,30 +123,41 @@ def github_prs(me):
     return prs
 
 
+def fetch_branches(ready):
+    """Fetches every ready PR's source and target branch in one git call."""
+    refs = sorted({pr["source"] for pr in ready} | {pr["target"] for pr in ready})
+    if refs:
+        run(["git", "fetch", "-q", "origin"] + refs, check=False)
+
+
 def changed_files(source, target):
-    """Returns the files a branch changes against its target, from git."""
-    run(["git", "fetch", "-q", "origin", source, target], check=False)
+    """Returns the files a branch changes against its target, from the already-fetched refs."""
     out = run(["git", "diff", "--name-only", "origin/" + target + "...origin/" + source], check=False)
     return set((out or "").split())
 
 
-def is_ancestor(a, b):
-    """True when commit a is an ancestor of commit b."""
-    return subprocess.run(["git", "merge-base", "--is-ancestor", a, b], capture_output=True).returncode == 0
+def unmerged_commits(source, target):
+    """The commits a branch carries that its target does not, as a set of hashes (one git call)."""
+    out = run(["git", "rev-list", "origin/" + target + "..origin/" + source], check=False)
+    return set((out or "").split())
 
 
 def order(ready):
     """Sorts ready PRs into merge order and records the reason for each position."""
-    for pr in ready:
+    fetch_branches(ready)
+
+    def read_branch(pr):
         pr["files"] = changed_files(pr["source"], pr["target"])
         pr["head"] = (run(["git", "rev-parse", "origin/" + pr["source"]], check=False) or "").strip()
+        pr["unmerged"] = unmerged_commits(pr["source"], pr["target"])
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(read_branch, ready))
     for pr in ready:
         others = [o for o in ready if o is not pr]
         pr["overlaps"] = sorted(o["id"] for o in others if pr["files"] & o["files"])
+        # Stacked: the other PR's head is one of this PR's commits that its target does not have yet.
         pr["stacked_on"] = sorted(o["id"] for o in others
-                                  if o["head"] and pr["head"] and o["head"] != pr["head"]
-                                  and is_ancestor(o["head"], pr["head"])
-                                  and not is_ancestor(o["head"], "origin/" + pr["target"]))
+                                  if o["head"] and o["head"] != pr["head"] and o["head"] in pr["unmerged"])
 
     def key(pr):
         priority = pr["priority"] if isinstance(pr["priority"], int) else 9
@@ -177,9 +199,12 @@ def main():
         sys.exit("origin is neither Azure DevOps nor GitHub: " + url)
     ready = [p for p in prs if not p["draft"] and p["clean"] and p["approved"]
              and not p["rejected"] and p["my_vote_pending"]]
+    if ready and "org_url" in ready[0]:
+        azure_work_items(ready)
     ordered = order(ready)
     if args.json:
-        print(json.dumps([{k: v for k, v in p.items() if k not in ("files", "head")} for p in ordered], indent=2))
+        print(json.dumps([{k: v for k, v in p.items() if k not in ("files", "head", "org_url", "unmerged")} for p in ordered],
+                         indent=2))
         return
     if not ordered:
         print("No PRs are waiting on your vote.")
