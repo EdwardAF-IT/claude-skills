@@ -49,8 +49,8 @@ a patch to apply to a protected path, a push the agent's gate refuses, a PR to v
 a person can close, a staged merge to commit, a credential or setting to change. Drop any you can do
 yourself. For each, gather everything he needs to finish it without looking anything up:
 
-- the exact terminal commands, in run order, with absolute paths, ready to paste (one shell; say
-  which: PowerShell or bash);
+- the exact terminal commands, in run order, with absolute paths, written into a small script he
+  runs with one typed line (see Phase 2 for why);
 - the link (PR, work item, file) when there is one;
 - how he will know it worked (the output to expect), and what you will do once he says it is done.
 
@@ -84,8 +84,14 @@ Straight after the last question (no work in between), walk the todos. For each,
 
 - Question text starts `Todo 2 of 5:` (the last one `LAST TODO (5 of 5):`), then the task in one
   line and why it matters in one more.
-- Put the commands and links in the first option's `preview` (monospace, copyable): the commands in
-  run order, the link, and the expected output. Keep it short enough to read at a glance.
+- **He cannot copy text out of the question box, and he does not see the `preview` pane or chat text
+  written just before the question.** So before Phase 1, write each todo's commands into its own
+  small script in the repo's data or notes folder (for example `<notes>\todos\t3.ps1`, a comment line
+  saying what it does, absolute paths inside), and put in the question text only the one short line
+  that runs it, with the full absolute path in quotes: `& 'C:\...\todos\t3.ps1'`. Never a path
+  relative to some folder. A todo done in a web page (vote, close a thread) gets the link and the
+  clicks instead.
+- State the expected output in the question text, in one line.
 - Options: `Done` (first), `Skip for now` (stays on the list, next round), `Won't do` (record it and
   drop it). Add `Tell me more` only when the task genuinely needs explanation.
 - If he picks `Tell me more`, answer in at most three lines and re-ask the same todo; that is the
@@ -143,8 +149,8 @@ If there are no questions, go straight to the todos; if there are no todos, the 
 ## Rules
 
 - One question or todo per call, always — but no work between calls.
-- A todo carries everything needed to do it: commands in run order, absolute paths, the link. He
-  should never have to look something up to finish one.
+- A todo carries everything needed to do it: a one-line script run, the link, the expected output.
+  He should never have to look something up or copy a block of text to finish one.
 - Never re-ask something already answered this session or already recorded as a decision.
 - Ask first; research only to apply an answer. No board queries or "is it still open" checks
   before asking — offer "Already handled" as an option instead.
