@@ -52,7 +52,7 @@ says when it applies.
 | Skill | What it does | Say |
 |---|---|---|
 | `design` | Hands a hard question to a deeper-thinking model and writes the proposal into the repo. | `design the sync layer` |
-| `review` | A review board of up to eight reviewer personas over a whole codebase, findings verified and ranked. | `review board` |
+| `review` | *Best results used with **Personetta*** A review board of up to eight reviewer personas over a whole codebase, findings verified and ranked. | `review board` or `/review`|
 | `prs` | Lists the pull requests waiting only on your vote, in merge order, with links. | `/prs` |
 | `agent-budget` | Caps how many subagents run at once, weighted by model, so a session doesn't hit its limit.  It's a simple formula where haiku = 1, sonnet = 2, opus = 3, fable = 4, and thinking adds .5.  The agent can use any combination of agents with thinking on or off as it needs whose sum does not exceed your limit.  Encourages using economical models automatically for routine work.  I usually use an opus or sonnet w/thinking model as a coordinator who then spawns subagents when using this pattern.  | `set the budget to 8` or `/agent-budget 12` |
 
