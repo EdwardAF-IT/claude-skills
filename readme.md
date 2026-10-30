@@ -35,7 +35,7 @@ says when it applies.
 | `handoff` | Ends a session with a note the next one resumes from, without losing the thread.   Saves tokens by making it easy to have shorter sessions for long activities. | `/handoff kitchen-remodel` |
 | `pickup` | Starts a session from that note, catches up on what changed since, and keeps going.  Saves tokens by making it easy to have shorter sessions for long activities.  | `/pickup kitchen-remodel` |
 | `checkpoint` | Saves a snapshot of where things stand and keeps working — for when you step away. | `/checkpoint` |
-| `sitrep` | A one-screen status report: what got done, what's running, what needs you. | `status?` or `/sitrep' |
+| `sitrep` | A one-screen status report: what got done, what's running, what needs you. | `status?` or `/sitrep` |
 | `asks` | Asks every question it has for you back to back, walks you through your own todos, then acts on the answers. | `my asks` or `/asks` |
 
 ### Documents
@@ -54,7 +54,7 @@ says when it applies.
 | `design` | Hands a hard question to a deeper-thinking model and writes the proposal into the repo. | `design the sync layer` |
 | `review` | A review board of up to eight reviewer personas over a whole codebase, findings verified and ranked. | `review board` |
 | `prs` | Lists the pull requests waiting only on your vote, in merge order, with links. | `/prs` |
-| `agent-budget` | Caps how many subagents run at once, weighted by model, so a session doesn't hit its limit.  It's a simple formula where haiku = 1, sonnet = 2, opus = 3, fable = 4, and thinking adds .5.  The agent can use any combination of agents with thinking on or off as it needs whose sum does not exceed your limit.  Encourages using economical models automatically for routine work.  I usually use an opus or sonnet w/thinking model as a coordinator who then spawns subagents when using this pattern.  | `set the budget to 8` or `/budget 12` |
+| `agent-budget` | Caps how many subagents run at once, weighted by model, so a session doesn't hit its limit.  It's a simple formula where haiku = 1, sonnet = 2, opus = 3, fable = 4, and thinking adds .5.  The agent can use any combination of agents with thinking on or off as it needs whose sum does not exceed your limit.  Encourages using economical models automatically for routine work.  I usually use an opus or sonnet w/thinking model as a coordinator who then spawns subagents when using this pattern.  | `set the budget to 8` or `/agent-budget 12` |
 
 ### The review board
 
