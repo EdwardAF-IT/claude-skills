@@ -27,5 +27,5 @@ Nothing else under `~/.claude` is touched. First time: open a new window, run `c
 
 Inside Claude Code, type the skill's name or say what you want: `handoff kitchen-remodel`,
 `pickup kitchen-remodel`, `checkpoint`, `magazine`, `diagram`, `publish this`, `prs` (the pull
-requests waiting on your vote, in merge order). Each skill's
-`SKILL.md` says when it applies.
+requests waiting on your vote, in merge order), `sitrep` (a one-screen status report). Each
+skill's `SKILL.md` says when it applies.

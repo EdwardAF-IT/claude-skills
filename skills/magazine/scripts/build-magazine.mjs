@@ -658,7 +658,8 @@ function classifyList(b, kind) {
   const bodies = b.items.map((it) => it.text.replace(BOLD_LEAD, ''));
   if (!b.hasNested && kind.ladder && sharedLeads(bodies).length) return 'fielded';
   // A nested list has no home inside a card; it stays a run-in item with its sub-list intact.
-  if (!b.hasNested && kind.cards && b.items.length <= 8 && Math.max(...bodies.map(words)) <= 60) return 'cardgrid';
+  // An ordered list is a sequence: a card grid would drop its numbers, so it stays a run-in, which keeps them.
+  if (!b.hasNested && !b.ordered && kind.cards && b.items.length <= 8 && Math.max(...bodies.map(words)) <= 60) return 'cardgrid';
   return 'runin';
 }
 
