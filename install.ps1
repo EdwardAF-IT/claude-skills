@@ -79,6 +79,9 @@ function Invoke-Checked([string] $exe, [string[]] $cmdArgs, [string] $onFailMess
     {
         throw ($onFailMessage + ' (' + $exe + ' exited with code ' + $LASTEXITCODE + ').')
     }
+    # A code below $failAt is success (robocopy uses 1-7 for "copied"); clear it so a successful
+    # run does not end with a nonzero exit code. Not `exit 0`: under `irm | iex` that closes the window.
+    $global:LASTEXITCODE = 0
 }
 
 function Ensure-Winget([string] $command, [string] $id, [string] $label, [string] $bin = '')
